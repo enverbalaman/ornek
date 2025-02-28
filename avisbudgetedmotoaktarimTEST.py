@@ -343,6 +343,40 @@ def update_xml_with_invoice(invoice_data, fatura_tipi=None):
     tree.write('ornek.xml', pretty_print=True, xml_declaration=True, encoding='UTF-8')
     print("XML file updated successfully.")
 
+def edm_login(client):
+    try:
+        action_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+03:00"
+        login_request_header = {
+            "SESSION_ID": str(uuid.uuid4()),
+            "CLIENT_TXN_ID": str(uuid.uuid4()),
+            "ACTION_DATE": action_date,
+            "REASON": "E-fatura/E-Arşiv gönder-al testleri için",
+            "APPLICATION_NAME": "TEST",
+            "HOSTNAME": "MDORA17",
+            "CHANNEL_NAME": "TEST",
+            "COMPRESSED": "N"
+        }
+
+        login_request = {
+            "REQUEST_HEADER": login_request_header,
+            "USER_NAME": "otomasyon",
+            "PASSWORD": "123456789"
+        }
+
+        print("🔄 EDM Login isteği gönderiliyor...")
+        login_response = client.service.Login(**login_request)
+        
+        if hasattr(login_response, 'SESSION_ID'):
+            print("✅ EDM Login başarılı")
+            return login_response.SESSION_ID
+        else:
+            print("❌ EDM Login başarısız: SESSION_ID bulunamadı")
+            return None
+
+    except Exception as e:
+        print(f"❌ EDM Login hatası: {str(e)}")
+        return None
+
 def load_invoice(receiver_data):
     print("\n🔄 Fatura yükleme başlatılıyor...")
     print(f"📋 Alıcı bilgileri: {json.dumps(receiver_data, indent=2)}")
@@ -368,7 +402,7 @@ def load_invoice(receiver_data):
 
         # Sender bilgileri
         sender = {
-            "vkn": "3230512384",  # Düzeltilmiş VKN
+            "vkn": "3230512384",
             "alias": "urn:mail:defaultgb@edmbilisim.com.tr"
         }
 
@@ -376,7 +410,7 @@ def load_invoice(receiver_data):
         invoice = {
             "TRXID": "0",
             "HEADER": {
-                "SENDER": "3230512384",  # Düzeltilmiş VKN
+                "SENDER": "3230512384",
                 "RECEIVER": receiver_data['vkn'],
                 "FROM": "urn:mail:defaultgb@edmbilisim.com.tr",
                 "TO": receiver_data['alias'],
@@ -424,17 +458,8 @@ def load_invoice(receiver_data):
                 print(f"❌ {error_msg}")
                 send_telegram_error(error_msg)
                 return False
-                
+            
             print("✅ LoadInvoice yanıtı başarılı:", response)
-            
-            # Başarılı durumda Telegram bildirimi
-            send_telegram_notification({
-                "KANo": invoice.get("KANo", "N/A"),
-                "TumMusteriAdi": receiver_data.get("vkn", "N/A"),
-                "PlakaNo": "N/A",
-                "KDVliToplamTutar": "N/A"
-            })
-            
             return True
 
         except Exception as e:
@@ -628,15 +653,21 @@ def main_loop():
                             }
                             
                             update_xml_with_invoice(invoice_data, fatura_tipi)
-                            load_invoice(receiver_data)
-                            print(f"✅ EDM'ye yeni bir Avis faturası eklendi (KA No: {invoice_data['KANo']})")
                             
-                            send_telegram_notification(invoice_data)
-                            processed_ka_numbers.add(invoice_data['KANo'])
-                            save_processed_ka_numbers()
+                            # Fatura yükleme ve bildirim
+                            if load_invoice(receiver_data):
+                                print(f"✅ EDM'ye yeni bir Avis faturası eklendi (KA No: {invoice_data['KANo']})")
+                                # Sadece başarılı durumda bildirim gönder
+                                send_telegram_notification(invoice_data)
+                                processed_ka_numbers.add(invoice_data['KANo'])
+                                save_processed_ka_numbers()
+                            else:
+                                print(f"❌ Fatura yüklenemedi (KA No: {invoice_data['KANo']})")
                             
                         except Exception as e:
-                            send_telegram_error(str(e), invoice_data.get('KANo'))
+                            error_msg = f"Fatura işleme hatası (KA No: {invoice_data.get('KANo')}): {str(e)}"
+                            print(f"❌ {error_msg}")
+                            send_telegram_error(error_msg)
             
             time.sleep(60)  # Her kontrol arasında 1 dakika bekle
             
