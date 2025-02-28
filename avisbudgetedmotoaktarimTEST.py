@@ -67,7 +67,7 @@ def get_invoice_data(license_no):
 
     payload = {
         "Token": current_token,
-        "LicenseNo": 1,  # Sadece Avis için (1)
+        "LicenseNo": license_no,  # 1 for Avis, 2 for Budget
         "InvoiceDate": "",
         "StartDate": today,
         "EndDate": today
@@ -81,14 +81,15 @@ def get_invoice_data(license_no):
     
     filtered_invoices = []
     today = datetime.now().date()
-    cutoff_time = datetime.strptime("08:00:00", "%H:%M:%S").time()
+    cutoff_time = datetime.strptime("16:00:00", "%H:%M:%S").time()
 
     for invoice in response_data['Data']['Invoices']:
         islem_saati = datetime.fromisoformat(invoice['IslemSaati'])
         if islem_saati.date() == today and islem_saati.time() > cutoff_time:
             filtered_invoices.append(invoice)
 
-    print(f"✅ Avis'ten {len(filtered_invoices)} adet fatura alındı")
+    company_name = "Avis" if license_no == 1 else "Budget"
+    print(f"✅ {company_name}'ten {len(filtered_invoices)} adet fatura alındı")
     return filtered_invoices
 
 def sayi_to_yazi(sayi):
@@ -343,94 +344,39 @@ def update_xml_with_invoice(invoice_data, fatura_tipi=None):
     tree.write('ornek.xml', pretty_print=True, xml_declaration=True, encoding='UTF-8')
     print("XML file updated successfully.")
 
-def edm_login(client):
-    try:
-        action_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+03:00"
-        login_request_header = {
-            "SESSION_ID": str(uuid.uuid4()),
-            "CLIENT_TXN_ID": str(uuid.uuid4()),
-            "ACTION_DATE": action_date,
-            "REASON": "E-fatura/E-Arşiv gönder-al testleri için",
-            "APPLICATION_NAME": "TEST",
-            "HOSTNAME": "MDORA17",
-            "CHANNEL_NAME": "TEST",
-            "COMPRESSED": "N"
-        }
-
-        login_request = {
-            "REQUEST_HEADER": login_request_header,
-            "USER_NAME": "otomasyon",
-            "PASSWORD": "123456789"
-        }
-
-        print("🔄 EDM Login isteği gönderiliyor...")
-        login_response = client.service.Login(**login_request)
-        
-        if hasattr(login_response, 'SESSION_ID'):
-            print("✅ EDM Login başarılı")
-            return login_response.SESSION_ID
-        else:
-            print("❌ EDM Login başarısız: SESSION_ID bulunamadı")
-            return None
-
-    except Exception as e:
-        print(f"❌ EDM Login hatası: {str(e)}")
-        return None
-
 def load_invoice(receiver_data):
-    print("\n🔄 Fatura yükleme başlatılıyor...")
-    print(f"📋 Alıcı bilgileri: {json.dumps(receiver_data, indent=2)}")
+    print("Loading invoice...")
+
+    # WSDL URL ve Client oluşturma
+    wsdl_url = "https://test.edmbilisim.com.tr/EFaturaEDM21ea/EFaturaEDM.svc?wsdl"
+    client = Client(wsdl=wsdl_url)
+    action_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-1] + "+03:00"
+
+    # Önce Login işlemi yapıp SESSION_ID alalım
+    login_request_header = {
+        "SESSION_ID": str(uuid.uuid4()),  # Geçici bir SESSION_ID
+        "CLIENT_TXN_ID": str(uuid.uuid4()),
+        "ACTION_DATE": action_date,
+        "REASON": "E-fatura/E-Arşiv gönder-al testleri için",
+        "APPLICATION_NAME": "TEST",
+        "HOSTNAME": "MDORA17",
+        "CHANNEL_NAME": "TEST",
+        "COMPRESSED": "N"
+    }
+
+    login_request = {
+        "REQUEST_HEADER": login_request_header,
+        "USER_NAME": "ertutech",
+        "PASSWORD": "1234567Edm"
+    }
 
     try:
-        # WSDL URL ve Client oluşturma
-        wsdl_url = "https://portal2.edmbilisim.com.tr/EFaturaEDM/EFaturaEDM.svc?wsdl"
-        client = Client(wsdl=wsdl_url)
-        action_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-1] + "+03:00"
+        print("Logging in...")
+        login_response = client.service.Login(**login_request)
+        session_id = login_response.SESSION_ID
+        print(f"Login successful. Session ID: {session_id}")
 
-        # XML dosyasını kontrol et
-        if not os.path.exists('ornek.xml'):
-            error_msg = "ornek.xml dosyası bulunamadı!"
-            print(f"❌ {error_msg}")
-            send_telegram_error(error_msg)
-            return False
-
-        # XML içeriğini oku ve base64'e çevir
-        with open('ornek.xml', 'rb') as xml_file:
-            xml_content = xml_file.read()
-            encoded_content = base64.b64encode(xml_content).decode('utf-8')
-            print("✅ XML dosyası okundu ve encode edildi")
-
-        # Sender bilgileri
-        sender = {
-            "vkn": "8930043435",
-            "alias": "urn:mail:urartugb@edmbilisim.com"
-        }
-
-        # Invoice içeriği
-        invoice = {
-            "TRXID": "0",
-            "HEADER": {
-                "SENDER": "8930043435",
-                "RECEIVER": receiver_data['vkn'],
-                "FROM": "urn:mail:urartugb@edmbilisim.com",
-                "TO": receiver_data['alias'],
-                "INTERNETSALES": False,
-                "EARCHIVE": False,
-                "EARCHIVE_REPORT_SENDDATE": "0001-01-01",
-                "CANCEL_EARCHIVE_REPORT_SENDDATE": "0001-01-01",
-            },
-            "CONTENT": encoded_content
-        }
-
-        # Login işlemi
-        session_id = edm_login(client)
-        if not session_id:
-            error_msg = "EDM Login başarısız!"
-            print(f"❌ {error_msg}")
-            send_telegram_error(error_msg)
-            return False
-
-        # Request header
+        # Create REQUEST_HEADER with the new SESSION_ID
         request_header = {
             "SESSION_ID": session_id,
             "CLIENT_TXN_ID": str(uuid.uuid4()),
@@ -442,37 +388,44 @@ def load_invoice(receiver_data):
             "COMPRESSED": "N"
         }
 
-        # LoadInvoice isteği
-        try:
-            response = client.service.LoadInvoice(
-                REQUEST_HEADER=request_header,
-                SENDER=sender,
-                RECEIVER=receiver_data,
-                INVOICE=[invoice],
-                GENERATEINVOICEIDONLOAD=True
-            )
-            
-            # Response kontrolü
-            if hasattr(response, 'ERROR'):
-                error_msg = f"Fatura yükleme hatası: {response.ERROR}"
-                print(f"❌ {error_msg}")
-                send_telegram_error(error_msg)
-                return False
-            
-            print("✅ LoadInvoice yanıtı başarılı:", response)
-            return True
+        # Global sender and receiver information
+        sender = {
+            "vkn": "3230512384",
+            "alias": "urn:mail:defaultgb@edmbilisim.com.tr"
+        }
 
-        except Exception as e:
-            error_msg = f"LoadInvoice hatası: {str(e)}"
-            print(f"❌ {error_msg}")
-            send_telegram_error(error_msg)
-            return False
+        # Read the content of ornek.xml and encode it in base64
+        with open('ornek.xml', 'rb') as xml_file:
+            xml_content = xml_file.read()
+            encoded_content = base64.b64encode(xml_content).decode('utf-8')
+
+        # Update the invoice content with the base64 encoded XML
+        invoice = {
+            "TRXID": "0",
+            "HEADER": {
+                "SENDER": "3230512384",
+                "RECEIVER": receiver_data['vkn'],
+                "FROM": "urn:mail:defaultgb@edmbilisim.com.tr",
+                "TO": receiver_data['alias'],
+                "INTERNETSALES": False,
+                "EARCHIVE": False,
+                "EARCHIVE_REPORT_SENDDATE": "0001-01-01",
+                "CANCEL_EARCHIVE_REPORT_SENDDATE": "0001-01-01",
+            },
+            "CONTENT": encoded_content
+        }
+
+        response = client.service.LoadInvoice(
+            REQUEST_HEADER=request_header,
+            SENDER=sender,
+            RECEIVER=receiver_data,
+            INVOICE=[invoice],
+            GENERATEINVOICEIDONLOAD=True
+        )
+        print("LoadInvoice successful:", response)
 
     except Exception as e:
-        error_msg = f"Fatura yükleme işlemi hatası: {str(e)}"
-        print(f"❌ {error_msg}")
-        send_telegram_error(error_msg)
-        return False
+        print("Error occurred:", str(e))
 
 def check_user(client, session_id, vkn):
     print(f"Checking user with VKN: {vkn}")
@@ -588,6 +541,7 @@ def main_loop():
     current_token = None
     last_session_time = None
     current_session = None
+    current_company = 1  # 1 for Avis, 2 for Budget
     
     while True:
         try:
@@ -598,8 +552,9 @@ def main_loop():
                 current_token = get_token()
                 last_token_time = current_time
             
-            # Sadece Avis kontrolü
-            invoice_data_list = get_invoice_data(1)  # 1 for Avis
+            # Sırayla Avis ve Budget kontrolü
+            company_name = "Avis" if current_company == 1 else "Budget"
+            invoice_data_list = get_invoice_data(current_company)
             
             if invoice_data_list:
                 new_invoices = [
@@ -608,11 +563,11 @@ def main_loop():
                 ]
                 
                 if not new_invoices:
-                    print(f"ℹ️ Avis'te yeni fatura bulunamadı")
+                    print(f"ℹ️ {company_name}'te yeni fatura bulunamadı")
                 else:
                     # EDM session kontrolü
                     if last_session_time is None or (current_time - last_session_time).total_seconds() >= 3600:
-                        wsdl_url = "https://portal2.edmbilisim.com.tr/EFaturaEDM/EFaturaEDM.svc?wsdl"
+                        wsdl_url = "https://test.edmbilisim.com.tr/EFaturaEDM21ea/EFaturaEDM.svc?wsdl"
                         client = Client(wsdl=wsdl_url)
                         
                         action_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+03:00"
@@ -629,8 +584,8 @@ def main_loop():
 
                         login_request = {
                             "REQUEST_HEADER": login_request_header,
-                            "USER_NAME": "otomasyon",
-                            "PASSWORD": "123456789"
+                            "USER_NAME": "ertutech",
+                            "PASSWORD": "1234567Edm"
                         }
 
                         login_response = client.service.Login(**login_request)
@@ -653,23 +608,20 @@ def main_loop():
                             }
                             
                             update_xml_with_invoice(invoice_data, fatura_tipi)
+                            load_invoice(receiver_data)
+                            print(f"✅ EDM'ye yeni bir {company_name} faturası eklendi (KA No: {invoice_data['KANo']})")
                             
-                            # Fatura yükleme ve bildirim
-                            if load_invoice(receiver_data):
-                                print(f"✅ EDM'ye yeni bir Avis faturası eklendi (KA No: {invoice_data['KANo']})")
-                                # Sadece başarılı durumda bildirim gönder
-                                send_telegram_notification(invoice_data)
-                                processed_ka_numbers.add(invoice_data['KANo'])
-                                save_processed_ka_numbers()
-                            else:
-                                print(f"❌ Fatura yüklenemedi (KA No: {invoice_data['KANo']})")
+                            send_telegram_notification(invoice_data)
+                            processed_ka_numbers.add(invoice_data['KANo'])
+                            save_processed_ka_numbers()
                             
                         except Exception as e:
-                            error_msg = f"Fatura işleme hatası (KA No: {invoice_data.get('KANo')}): {str(e)}"
-                            print(f"❌ {error_msg}")
-                            send_telegram_error(error_msg)
+                            send_telegram_error(str(e), invoice_data.get('KANo'))
             
-            time.sleep(60)  # Her kontrol arasında 1 dakika bekle
+            # Şirket değiştir (1 -> 2 veya 2 -> 1)
+            current_company = 2 if current_company == 1 else 1
+            
+            time.sleep(60)  # Her şirket kontrolü arasında 1 dakika bekle
             
         except Exception as e:
             send_telegram_error(str(e))
