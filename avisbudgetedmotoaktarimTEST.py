@@ -402,17 +402,17 @@ def load_invoice(receiver_data):
 
         # Sender bilgileri
         sender = {
-            "vkn": "3230512384",
-            "alias": "urn:mail:defaultgb@edmbilisim.com.tr"
+            "vkn": "8930043435",
+            "alias": "urn:mail:urartugb@edmbilisim.com"
         }
 
         # Invoice içeriği
         invoice = {
             "TRXID": "0",
             "HEADER": {
-                "SENDER": "3230512384",
+                "SENDER": "8930043435",
                 "RECEIVER": receiver_data['vkn'],
-                "FROM": "urn:mail:defaultgb@edmbilisim.com.tr",
+                "FROM": "urn:mail:urartugb@edmbilisim.com",
                 "TO": receiver_data['alias'],
                 "INTERNETSALES": False,
                 "EARCHIVE": False,
