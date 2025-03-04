@@ -13,6 +13,9 @@ import random
 import requests
 import logging
 
+# Sabit URL tanımlamaları
+EDM_WSDL_URL = "https://portal2.edmbilisim.com.tr/EFaturaEDM/EFaturaEDM.svc?wsdl"
+
 # Logging yapılandırması
 logging.basicConfig(
     filename='invoice_processing.log',
@@ -397,7 +400,7 @@ def main_loop():
                 else:
                     # EDM session kontrolü
                     if last_session_time is None or (current_time - last_session_time).total_seconds() >= 3600:
-                        wsdl_url = "https://test.edmbilisim.com.tr/EFaturaEDM21ea/EFaturaEDM.svc?wsdl"
+                        wsdl_url = EDM_WSDL_URL
                         client = Client(wsdl=wsdl_url)
                         
                         action_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+03:00"
@@ -848,8 +851,7 @@ def load_invoice(receiver_data):
     logging.info("Loading invoice...")
 
     # WSDL URL ve Client oluşturma
-    wsdl_url = "https://portal2.edmbilisim.com.tr/EFaturaEDM/EFaturaEDM.svc?wsdl"
-    client = Client(wsdl=wsdl_url)
+    client = Client(wsdl=EDM_WSDL_URL)
     action_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-1] + "+03:00"
 
     # Önce Login işlemi yapıp SESSION_ID alalım
@@ -890,8 +892,8 @@ def load_invoice(receiver_data):
 
         # Global sender and receiver information
         sender = {
-            "vkn": "8930043435",
-            "alias": "urn:mail:urartugb@edmbilisim.com"
+            "vkn": "3230512384",
+            "alias": "urn:mail:defaultgb@edmbilisim.com.tr"
         }
 
         # Read the content of ornek.xml and encode it in base64
@@ -903,9 +905,9 @@ def load_invoice(receiver_data):
         invoice = {
             "TRXID": "0",
             "HEADER": {
-                "SENDER": "8930043435",
+                "SENDER": "3230512384",
                 "RECEIVER": receiver_data['vkn'],
-                "FROM": "urn:mail:urartugb@edmbilisim.com",
+                "FROM": "urn:mail:defaultgb@edmbilisim.com.tr",
                 "TO": receiver_data['alias'],
                 "INTERNETSALES": False,
                 "EARCHIVE": False,
