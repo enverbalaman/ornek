@@ -76,14 +76,17 @@ def get_token():
 
 def get_invoice_data(license_no):
     url = "https://merkezwebapi.otokoc.com.tr/STDealer/GetInvoiceList"
-    today = datetime.now().strftime("%Y%m%d")
+    
+    # 3 Mart 2025 tarihini ve saat 17:00'ı belirle
+    start_date = "20250303"
+    cutoff_time = datetime.strptime("17:00:00", "%H:%M:%S").time()
 
     payload = {
         "Token": current_token,
         "LicenseNo": license_no,
         "InvoiceDate": "",
-        "StartDate": today,
-        "EndDate": today
+        "StartDate": start_date,
+        "EndDate": start_date
     }
     
     try:
@@ -96,12 +99,10 @@ def get_invoice_data(license_no):
             return []
         
         filtered_invoices = []
-        today = datetime.now().date()
-        cutoff_time = datetime.strptime("16:00:00", "%H:%M:%S").time()
-
         for invoice in response_data['Data']['Invoices']:
             islem_saati = datetime.fromisoformat(invoice['IslemSaati'])
-            if islem_saati.date() == today and islem_saati.time() > cutoff_time:
+            # Tarih ve saat kontrolü
+            if islem_saati.date() == datetime.strptime(start_date, "%Y%m%d").date() and islem_saati.time() > cutoff_time:
                 filtered_invoices.append(invoice)
 
         company_name = "Avis" if license_no == 1 else "Budget"
