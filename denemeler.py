@@ -844,6 +844,89 @@ def main():
         print(f"\n❌ Genel hata: {str(e)}")
         traceback.print_exc()
 
+def load_invoice(receiver_data):
+    logging.info("Loading invoice...")
+
+    # WSDL URL ve Client oluşturma
+    wsdl_url = "https://test.edmbilisim.com.tr/EFaturaEDM21ea/EFaturaEDM.svc?wsdl"
+    client = Client(wsdl=wsdl_url)
+    action_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-1] + "+03:00"
+
+    # Önce Login işlemi yapıp SESSION_ID alalım
+    login_request_header = {
+        "SESSION_ID": str(uuid.uuid4()),  # Geçici bir SESSION_ID
+        "CLIENT_TXN_ID": str(uuid.uuid4()),
+        "ACTION_DATE": action_date,
+        "REASON": "E-fatura/E-Arşiv gönder-al testleri için",
+        "APPLICATION_NAME": "TEST",
+        "HOSTNAME": "MDORA17",
+        "CHANNEL_NAME": "TEST",
+        "COMPRESSED": "N"
+    }
+
+    login_request = {
+        "REQUEST_HEADER": login_request_header,
+        "USER_NAME": "ertutech",
+        "PASSWORD": "1234567Edm"
+    }
+
+    try:
+        logging.info("Logging in...")
+        login_response = client.service.Login(**login_request)
+        session_id = login_response.SESSION_ID
+        logging.info(f"Login successful. Session ID: {session_id}")
+
+        # Create REQUEST_HEADER with the new SESSION_ID
+        request_header = {
+            "SESSION_ID": session_id,
+            "CLIENT_TXN_ID": str(uuid.uuid4()),
+            "ACTION_DATE": action_date,
+            "REASON": "E-fatura/E-Arşiv gönder-al testleri için",
+            "APPLICATION_NAME": "TEST",
+            "HOSTNAME": "MDORA17",
+            "CHANNEL_NAME": "TEST",
+            "COMPRESSED": "N"
+        }
+
+        # Global sender and receiver information
+        sender = {
+            "vkn": "3230512384",
+            "alias": "urn:mail:defaultgb@edmbilisim.com.tr"
+        }
+
+        # Read the content of ornek.xml and encode it in base64
+        with open('ornek.xml', 'rb') as xml_file:
+            xml_content = xml_file.read()
+            encoded_content = base64.b64encode(xml_content).decode('utf-8')
+
+        # Update the invoice content with the base64 encoded XML
+        invoice = {
+            "TRXID": "0",
+            "HEADER": {
+                "SENDER": "3230512384",
+                "RECEIVER": receiver_data['vkn'],
+                "FROM": "urn:mail:defaultgb@edmbilisim.com.tr",
+                "TO": receiver_data['alias'],
+                "INTERNETSALES": False,
+                "EARCHIVE": False,
+                "EARCHIVE_REPORT_SENDDATE": "0001-01-01",
+                "CANCEL_EARCHIVE_REPORT_SENDDATE": "0001-01-01",
+            },
+            "CONTENT": encoded_content
+        }
+
+        response = client.service.LoadInvoice(
+            REQUEST_HEADER=request_header,
+            SENDER=sender,
+            RECEIVER=receiver_data,
+            INVOICE=[invoice],
+            GENERATEINVOICEIDONLOAD=True
+        )
+        logging.info("LoadInvoice successful:", response)
+
+    except Exception as e:
+        logging.error(f"Error occurred while loading invoice: {e}")
+
 if __name__ == "__main__":
     logging.info("Starting continuous invoice processing...")
     main_loop()
