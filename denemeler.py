@@ -492,11 +492,8 @@ def edm_login():
         traceback.print_exc()
         return None, None
 
-def check_user_and_get_info(client, session_id, vkn):
-    print("\n" + "="*50)
-    print(f"🔍 CheckUser İşlemi Başlatıldı - VKN: {vkn}")
-    print("="*50)
-    
+def check_user(client, session_id, vkn):
+    logging.info(f"Checking user with VKN: {vkn}")
     action_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+03:00"
 
     request_header = {
@@ -515,121 +512,24 @@ def check_user_and_get_info(client, session_id, vkn):
     }
 
     try:
-        print("\n📤 CheckUser İsteği Gönderiliyor...")
-        print(f"Request Header: {json.dumps(request_header, indent=2)}")
-        print(f"User Data: {json.dumps(user, indent=2)}")
-        
+        logging.info("Sending CheckUser request...")
         response = client.service.CheckUser(REQUEST_HEADER=request_header, USER=user)
-        print("\n📥 CheckUser Yanıtı Alındı")
-        
-        serialized_response = serialize_object(response)
-        print("\nCheckUser Response Details:")
-        print("-" * 50)
-        print(json.dumps(serialized_response, indent=2, ensure_ascii=False))
-        print("-" * 50)
+        logging.info("CheckUser Response Details:")
+        logging.info(f"Full Response: {response}")
 
         # Response boş dizi kontrolü
-        if not response or len(response) == 0:
-            print("\n⚠️ Kullanıcı e-fatura sisteminde bulunamadı")
-            return None, None, None, None, None, None
-        
-        print("\n✅ Kullanıcı e-fatura sisteminde bulundu")
-        
-        # Response'un ilk elemanından ALIAS değerini al
-        first_user = response[0]
-        alias = first_user.ALIAS if hasattr(first_user, 'ALIAS') else None
-        print(f"📧 Alias: {alias}")
-        
-        if not alias:
-            print("\n⚠️ Alias bulunamadı")
-            return None, None, None, None, None, None
-            
-        # TURMOB bilgilerini al
-        print("\n🔄 TURMOB Bilgileri Alınıyor...")
-        turmob_header = {
-            "SESSION_ID": session_id,
-            "CLIENT_TXN_ID": str(uuid.uuid4()),
-            "ACTION_DATE": datetime.now().strftime("%Y-%m-%d"),
-            "REASON": "test",
-            "APPLICATION_NAME": "EDMTEST",
-            "HOSTNAME": "BALCIAS",
-            "CHANNEL_NAME": "EDM",
-            "COMPRESSED": "N"
-        }
-        
-        try:
-            print("\n📤 TURMOB İsteği Gönderiliyor...")
-            print(f"VKN: {vkn}")
-            print(f"Session ID: {session_id}")
-            print(f"TURMOB Request Header: {json.dumps(turmob_header, indent=2)}")
-            
-            try:
-                turmob_response = client.service.GetTurmob(REQUEST_HEADER=turmob_header, VKN=vkn)
-            except zeep.exceptions.Fault as soap_error:
-                print(f"\n❌ SOAP Hatası:")
-                print(f"Hata Mesajı: {soap_error.message}")
-                if hasattr(soap_error, 'detail'):
-                    detail_xml = ET.tostring(soap_error.detail, encoding='unicode')
-                    print(f"Hata Detayı XML: {detail_xml}")
-                print(f"Hata Kodu: {getattr(soap_error, 'code', 'Kod yok')}")
-                return None, None, None, None, None, None
-            
-            print("\n📥 TURMOB Ham Yanıt:")
-            print("-" * 50)
-            print(turmob_response)
-            print("-" * 50)
-            
-            if hasattr(turmob_response, 'ERROR'):
-                print(f"\n❌ TURMOB Hatası: {turmob_response.ERROR}")
-                return None, None, None, None, None, None
-            
-            serialized_turmob = serialize_object(turmob_response)
-            print("\n📥 TURMOB Serialize Edilmiş Yanıt:")
-            print("-" * 50)
-            print(json.dumps(serialized_turmob, indent=2, ensure_ascii=False))
-            print("-" * 50)
-            
-            # Yanıt kontrolü
-            if not serialized_turmob:
-                print("\n⚠️ TURMOB yanıtı boş")
-                return None, None, None, None, None, None
-            
-            # TURMOB bilgilerini al
-            vergi_dairesi = serialized_turmob.get('vergiDairesiAdi', '')
-            unvan = serialized_turmob.get('kimlikUnvani', '')
-            
-            # Adres bilgileri
-            adres_bilgileri = serialized_turmob.get('adresBilgileri', {}).get('AdresBilgileri', [{}])[0]
-            
-            # Adres bileşenlerini birleştir
-            adres_parcalari = [
-                adres_bilgileri.get('mahalleSemt', ''),
-                adres_bilgileri.get('caddeSokak', ''),
-                adres_bilgileri.get('disKapiNo', ''),
-                adres_bilgileri.get('icKapiNo', '')
-            ]
-            tam_adres = ' '.join(filter(None, adres_parcalari))
-            il = adres_bilgileri.get('ilAdi', '')
-            ilce = adres_bilgileri.get('ilceAdi', '')
-            
-            print("\n📋 TURMOB Bilgileri:")
-            print(f"Vergi Dairesi: {vergi_dairesi}")
-            print(f"Unvan: {unvan}")
-            print(f"Adres: {tam_adres}")
-            print(f"İl: {il}")
-            print(f"İlçe: {ilce}")
-            
-            return alias, vergi_dairesi, unvan, tam_adres, il, ilce
-            
-        except Exception as e:
-            print(f"\n❌ TURMOB bilgileri alınırken hata: {str(e)}")
-            traceback.print_exc()
-            return None, None, None, None, None, None
+        if not response or (isinstance(response, list) and len(response) == 0):
+            logging.info("Empty response, user is not in e-invoice system")
+            return "EARSIVFATURA", None
+        else:
+            logging.info("User found in e-invoice system")
+            # İlk ALIAS değerini al
+            alias = response[0].get('ALIAS') if response and len(response) > 0 else None
+            return "TICARIFATURA", alias
 
     except Exception as e:
-        print(f"\n❌ CheckUser işleminde hata: {str(e)}")
-        traceback.print_exc()
-        return None, None, None, None, None, None
+        logging.error(f"Unexpected error in CheckUser: {e}")
+        return "EARSIVFATURA", None
 
 def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, tam_adres, il, ilce):
     try:
