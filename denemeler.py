@@ -590,10 +590,12 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
         customer = root.find('.//cac:AccountingCustomerParty', namespaces)
         if customer is not None:
             # VKN güncelle
-            vkn_element = customer.find('.//cac:PartyIdentification/cbc:ID[@schemeID="VKN"]', namespaces)
-            if vkn_element is not None:
-                vkn_element.text = vkn
             
+             vkn_element = root.find(".//cac:AccountingCustomerParty//cac:Party//cac:PartyIdentification//cbc:ID[@schemeID='VKN']", namespaces=namespaces)
+        if vkn_element is not None:
+            vkn_element.text = formatted_invoice_data['VergiNumarasi']
+            logging.info(f"VKN güncellendi: {vkn_element.text}")
+
             # Unvan güncelle
             name_element = customer.find('.//cac:PartyName/cbc:Name', namespaces)
             if name_element is not None:
