@@ -890,8 +890,8 @@ def load_invoice(receiver_data):
 
         # Global sender and receiver information
         sender = {
-            "vkn": "3230512384",
-            "alias": "urn:mail:defaultgb@edmbilisim.com.tr"
+            "vkn": "8930043435",
+            "alias": "urn:mail:urartugb@edmbilisim.com"
         }
 
         # Read the content of ornek.xml and encode it in base64
@@ -903,9 +903,9 @@ def load_invoice(receiver_data):
         invoice = {
             "TRXID": "0",
             "HEADER": {
-                "SENDER": "3230512384",
+                "SENDER": "8930043435",
                 "RECEIVER": receiver_data['vkn'],
-                "FROM": "urn:mail:defaultgb@edmbilisim.com.tr",
+                "FROM": "urn:mail:urartugb@edmbilisim.com",
                 "TO": receiver_data['alias'],
                 "INTERNETSALES": False,
                 "EARCHIVE": False,
