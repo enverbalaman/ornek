@@ -414,8 +414,8 @@ def main_loop():
 
                         login_request = {
                             "REQUEST_HEADER": login_request_header,
-                            "USER_NAME": "ertutech",
-                            "PASSWORD": "1234567Edm"
+                            "USER_NAME": "otomasyon",
+                            "PASSWORD": "123456789"
                         }
 
                         login_response = client.service.Login(**login_request)
