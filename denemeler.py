@@ -854,7 +854,7 @@ def load_invoice(receiver_data):
         client = Client(wsdl=wsdl_url)
         action_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-1] + "+03:00"
 
-        # XML dosyasını kontrol et ve VKN'yi doğrula
+        # XML dosyasını kontrol et
         tree = ET.parse('ornek.xml')
         root = tree.getroot()
         namespaces = {
@@ -862,6 +862,11 @@ def load_invoice(receiver_data):
             'cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2'
         }
         
+        # ProfileID'yi kontrol et (EARSIVFATURA mı TICARIFATURA mı?)
+        profile_id = root.find(".//cbc:ProfileID", namespaces)
+        is_earchive = profile_id is not None and profile_id.text == "EARSIVFATURA"
+        logging.info(f"Fatura tipi: {'EARSIVFATURA' if is_earchive else 'TICARIFATURA'}")
+
         # XML'deki VKN'yi kontrol et
         xml_vkn_element = root.find(".//cac:AccountingCustomerParty//cac:PartyIdentification/cbc:ID", namespaces)
         if xml_vkn_element is not None:
@@ -876,7 +881,7 @@ def load_invoice(receiver_data):
                 tree.write('ornek.xml', encoding='UTF-8', xml_declaration=True)
                 logging.info("XML'deki VKN güncellendi")
 
-        # Önce Login işlemi yapıp SESSION_ID alalım
+        # Login işlemi
         login_request_header = {
             "SESSION_ID": str(uuid.uuid4()),
             "CLIENT_TXN_ID": str(uuid.uuid4()),
@@ -899,7 +904,6 @@ def load_invoice(receiver_data):
         session_id = login_response.SESSION_ID
         logging.info(f"Login successful. Session ID: {session_id}")
 
-        # Create REQUEST_HEADER with the new SESSION_ID
         request_header = {
             "SESSION_ID": session_id,
             "CLIENT_TXN_ID": str(uuid.uuid4()),
@@ -911,27 +915,32 @@ def load_invoice(receiver_data):
             "COMPRESSED": "N"
         }
 
-        # Global sender and receiver information
         sender = {
             "vkn": "8930043435",
             "alias": "urn:mail:urartugb@edmbilisim.com"
         }
 
-        # Read the content of ornek.xml and encode it in base64
+        # E-Arşiv fatura için alıcı bilgilerini düzenle
+        if is_earchive:
+            receiver_data = {
+                "vkn": receiver_data['vkn'],
+                "alias": f"urn:mail:defaultpk@edmbilisim.com.tr"  # E-Arşiv için sabit alias
+            }
+
+        # XML içeriğini oku ve encode et
         with open('ornek.xml', 'rb') as xml_file:
             xml_content = xml_file.read()
             encoded_content = base64.b64encode(xml_content).decode('utf-8')
 
-        # Update the invoice content with the base64 encoded XML
         invoice = {
             "TRXID": "0",
             "HEADER": {
-                "SENDER": "8930043435",
+                "SENDER": sender["vkn"],
                 "RECEIVER": receiver_data['vkn'],
-                "FROM": "urn:mail:urartugb@edmbilisim.com",
+                "FROM": sender["alias"],
                 "TO": receiver_data['alias'],
                 "INTERNETSALES": False,
-                "EARCHIVE": False,
+                "EARCHIVE": is_earchive,
                 "EARCHIVE_REPORT_SENDDATE": "0001-01-01",
                 "CANCEL_EARCHIVE_REPORT_SENDDATE": "0001-01-01",
             },
@@ -940,6 +949,7 @@ def load_invoice(receiver_data):
 
         logging.info("Sending LoadInvoice request...")
         logging.info(f"Request details: Sender={sender}, Receiver={receiver_data}")
+        logging.info(f"Invoice HEADER: {invoice['HEADER']}")
 
         response = client.service.LoadInvoice(
             REQUEST_HEADER=request_header,
@@ -949,11 +959,9 @@ def load_invoice(receiver_data):
             GENERATEINVOICEIDONLOAD=True
         )
         
-        # Response'u detaylı logla
         serialized_response = serialize_object(response)
         logging.info(f"LoadInvoice response: {serialized_response}")
 
-        # Başarı durumunu kontrol et
         if (response and 
             hasattr(response, 'INVOICE') and 
             response.INVOICE and 
