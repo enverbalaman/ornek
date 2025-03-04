@@ -13,9 +13,6 @@ import random
 import requests
 import logging
 
-# Sabit URL tanımlamaları
-EDM_WSDL_URL = "https://portal2.edmbilisim.com.tr/EFaturaEDM/EFaturaEDM.svc?wsdl"
-
 # Logging yapılandırması
 logging.basicConfig(
     filename='invoice_processing.log',
@@ -82,7 +79,7 @@ def get_invoice_data(license_no):
     
     # 3 Mart 2025 tarihini ve saat 17:00'ı belirle
     start_date = "20250303"
-    cutoff_time = datetime.strptime("17:00:00", "%H:%M:%S").time()
+    cutoff_time = datetime.strptime("12:00:00", "%H:%M:%S").time()
 
     payload = {
         "Token": current_token,
@@ -400,7 +397,7 @@ def main_loop():
                 else:
                     # EDM session kontrolü
                     if last_session_time is None or (current_time - last_session_time).total_seconds() >= 3600:
-                        wsdl_url = EDM_WSDL_URL
+                        wsdl_url = "https://portal2.edmbilisim.com.tr/EFaturaEDM/EFaturaEDM.svc?wsdl"
                         client = Client(wsdl=wsdl_url)
                         
                         action_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+03:00"
@@ -590,12 +587,10 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
         customer = root.find('.//cac:AccountingCustomerParty', namespaces)
         if customer is not None:
             # VKN güncelle
+            vkn_element = customer.find('.//cac:PartyIdentification/cbc:ID[@schemeID="VKN"]', namespaces)
+            if vkn_element is not None:
+                vkn_element.text = vkn
             
-             vkn_element = root.find(".//cac:AccountingCustomerParty//cac:Party//cac:PartyIdentification//cbc:ID[@schemeID='VKN']", namespaces=namespaces)
-        if vkn_element is not None:
-            vkn_element.text = formatted_invoice_data['VergiNumarasi']
-            logging.info(f"VKN güncellendi: {vkn_element.text}")
-
             # Unvan güncelle
             name_element = customer.find('.//cac:PartyName/cbc:Name', namespaces)
             if name_element is not None:
@@ -851,31 +846,55 @@ def main():
 
 def load_invoice(receiver_data):
     logging.info("Loading invoice...")
-
-    # WSDL URL ve Client oluşturma
-    client = Client(wsdl=EDM_WSDL_URL)
-    action_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-1] + "+03:00"
-
-    # Önce Login işlemi yapıp SESSION_ID alalım
-    login_request_header = {
-        "SESSION_ID": str(uuid.uuid4()),  # Geçici bir SESSION_ID
-        "CLIENT_TXN_ID": str(uuid.uuid4()),
-        "ACTION_DATE": action_date,
-        "REASON": "E-fatura/E-Arşiv gönder-al testleri için",
-        "APPLICATION_NAME": "TEST",
-        "HOSTNAME": "MDORA17",
-        "CHANNEL_NAME": "TEST",
-        "COMPRESSED": "N"
-    }
-
-    login_request = {
-        "REQUEST_HEADER": login_request_header,
-        "USER_NAME": "otomasyon",
-        "PASSWORD": "123456789"
-    }
+    logging.info(f"Receiver data: {receiver_data}")
 
     try:
-        logging.info("Logging in...")
+        # WSDL URL ve Client oluşturma
+        wsdl_url = "https://portal2.edmbilisim.com.tr/EFaturaEDM/EFaturaEDM.svc?wsdl"
+        client = Client(wsdl=wsdl_url)
+        action_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-1] + "+03:00"
+
+        # XML dosyasını kontrol et ve VKN'yi doğrula
+        tree = ET.parse('ornek.xml')
+        root = tree.getroot()
+        namespaces = {
+            'cac': 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2',
+            'cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2'
+        }
+        
+        # XML'deki VKN'yi kontrol et
+        xml_vkn_element = root.find(".//cac:AccountingCustomerParty//cac:PartyIdentification/cbc:ID", namespaces)
+        if xml_vkn_element is not None:
+            xml_vkn = xml_vkn_element.text
+            logging.info(f"XML'deki VKN: {xml_vkn}")
+            logging.info(f"Gönderilecek VKN: {receiver_data['vkn']}")
+            
+            # VKN'ler uyuşmuyorsa güncelle
+            if xml_vkn != receiver_data['vkn']:
+                logging.warning(f"VKN uyuşmazlığı tespit edildi. XML: {xml_vkn}, Receiver: {receiver_data['vkn']}")
+                xml_vkn_element.text = receiver_data['vkn']
+                tree.write('ornek.xml', encoding='UTF-8', xml_declaration=True)
+                logging.info("XML'deki VKN güncellendi")
+
+        # Önce Login işlemi yapıp SESSION_ID alalım
+        login_request_header = {
+            "SESSION_ID": str(uuid.uuid4()),
+            "CLIENT_TXN_ID": str(uuid.uuid4()),
+            "ACTION_DATE": action_date,
+            "REASON": "E-fatura/E-Arşiv gönder-al testleri için",
+            "APPLICATION_NAME": "TEST",
+            "HOSTNAME": "MDORA17",
+            "CHANNEL_NAME": "TEST",
+            "COMPRESSED": "N"
+        }
+
+        login_request = {
+            "REQUEST_HEADER": login_request_header,
+            "USER_NAME": "otomasyon",
+            "PASSWORD": "123456789"
+        }
+
+        logging.info("Logging in to EDM...")
         login_response = client.service.Login(**login_request)
         session_id = login_response.SESSION_ID
         logging.info(f"Login successful. Session ID: {session_id}")
@@ -919,6 +938,9 @@ def load_invoice(receiver_data):
             "CONTENT": encoded_content
         }
 
+        logging.info("Sending LoadInvoice request...")
+        logging.info(f"Request details: Sender={sender}, Receiver={receiver_data}")
+
         response = client.service.LoadInvoice(
             REQUEST_HEADER=request_header,
             SENDER=sender,
@@ -926,10 +948,29 @@ def load_invoice(receiver_data):
             INVOICE=[invoice],
             GENERATEINVOICEIDONLOAD=True
         )
-        logging.info("LoadInvoice successful:", response)
+        
+        # Response'u detaylı logla
+        serialized_response = serialize_object(response)
+        logging.info(f"LoadInvoice response: {serialized_response}")
+
+        # Başarı durumunu kontrol et
+        if (response and 
+            hasattr(response, 'INVOICE') and 
+            response.INVOICE and 
+            response.INVOICE[0].HEADER.STATUS == 'LOAD - SUCCEED'):
+            logging.info("Invoice loaded successfully")
+            return True
+        else:
+            error_msg = "Invoice loading failed"
+            if hasattr(response, 'ERROR'):
+                error_msg += f": {response.ERROR}"
+            logging.error(error_msg)
+            return False
 
     except Exception as e:
-        logging.error(f"Error occurred while loading invoice: {e}")
+        logging.error(f"Error occurred while loading invoice: {str(e)}")
+        traceback.print_exc()
+        return False
 
 if __name__ == "__main__":
     logging.info("Starting continuous invoice processing...")
