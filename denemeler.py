@@ -848,7 +848,7 @@ def load_invoice(receiver_data):
     logging.info("Loading invoice...")
 
     # WSDL URL ve Client oluşturma
-    wsdl_url = "https://test.edmbilisim.com.tr/EFaturaEDM21ea/EFaturaEDM.svc?wsdl"
+    wsdl_url = "https://portal2.edmbilisim.com.tr/EFaturaEDM/EFaturaEDM.svc?wsdl"
     client = Client(wsdl=wsdl_url)
     action_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-1] + "+03:00"
 
@@ -866,8 +866,8 @@ def load_invoice(receiver_data):
 
     login_request = {
         "REQUEST_HEADER": login_request_header,
-        "USER_NAME": "ertutech",
-        "PASSWORD": "1234567Edm"
+        "USER_NAME": "otomasyon",
+        "PASSWORD": "123456789"
     }
 
     try:
