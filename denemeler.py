@@ -887,12 +887,6 @@ def main():
         print("\n🔄 Fatura işleme servisi başlatıldı")
         
         # Başlangıçta IP bilgilerini göster
-        ip_info = get_my_ip()
-        if ip_info:
-            print(f"\n📡 Sistem IP Bilgileri:")
-            print(f"   🌐 Dış IP: {ip_info['external_ip']}")
-            print(f"   🏠 Yerel IP: {ip_info['local_ip']}")
-            print(f"   💻 Hostname: {ip_info['hostname']}")
         
         send_telegram_notification("<b>🚀 Fatura İşleme Servisi Başlatıldı</b>")
         
