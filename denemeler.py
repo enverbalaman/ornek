@@ -80,20 +80,26 @@ def get_invoice_data():
             return []
         
         print("\n📊 Otokoc API'den fatura verileri çekiliyor...")
+        
         url = "https://merkezwebapi.otokoc.com.tr/STDealer/GetInvoiceList"
+        
+        # Dünün tarihini al
+        yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
         today = datetime.now().strftime("%Y%m%d")
+        
+        print(f"🗓️ Tarih aralığı: {yesterday} - {today}")
 
         payload = {
             "Token": token,
             "LicenseNo": 1,
             "InvoiceDate": "",
-            "StartDate": today,
+            "StartDate": yesterday,
             "EndDate": today
         }
         
         response = requests.post(url, json=payload)
+        response.raise_for_status()  # HTTP hatalarını yakala
         response_data = response.json()
-        
         if response.status_code == 200 and response_data.get('Success'):
             invoices = response_data.get('Data', [])
             print(f"✅ Otokoc API'den {len(invoices)} fatura verisi çekildi")
