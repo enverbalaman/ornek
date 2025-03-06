@@ -33,11 +33,11 @@ def get_otokoc_token():
         # IP bilgilerini al ve göster
         
         
-        url = "https://merkezwebapi.otokoc.com.tr/STDealer/GetToken"
-        payload = {
-            "Username": "UrartuTrz",
-            "Password": "Tsv*57139!"
-        }
+    url = "https://merkezwebapi.otokoc.com.tr/STDealer/GetToken"
+    payload = {
+        "Username": "UrartuTrz",
+        "Password": "Tsv*57139!"
+    }
         
         response = requests.post(url, json=payload)
         response.raise_for_status()  # HTTP hatalarını yakala
@@ -85,22 +85,22 @@ def get_invoice_data():
         
         print("\n📊 Otokoc API'den fatura verileri çekiliyor...")
         
-        url = "https://merkezwebapi.otokoc.com.tr/STDealer/GetInvoiceList"
-        
+    url = "https://merkezwebapi.otokoc.com.tr/STDealer/GetInvoiceList"
+    
         # Dünün tarihini al
         yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
         today = datetime.now().strftime("%Y%m%d")
         
         print(f"🗓️ Tarih aralığı: {yesterday} - {today}")
 
-        payload = {
+    payload = {
             "Token": token,
             "LicenseNo": 1,
-            "InvoiceDate": "",
+        "InvoiceDate": "",
             "StartDate": yesterday,
             "EndDate": today
-        }
-        
+    }
+    
         response = requests.post(url, json=payload)
         response.raise_for_status()  # HTTP hatalarını yakala
         response_data = response.json()
@@ -109,8 +109,8 @@ def get_invoice_data():
             print("❌ Token süresi dolmuş, yenileniyor...")
             token = get_otokoc_token()
             if not token:
-                return []
-            
+            return []
+        
             # Yeni token ile tekrar dene
             payload["Token"] = token
             response = requests.post(url, json=payload)
@@ -120,8 +120,8 @@ def get_invoice_data():
         if 'Data' not in response_data or 'Invoices' not in response_data['Data']:
             print(f"❌ Otokoc API'den fatura verileri çekilemedi: Geçersiz yanıt formatı")
             print(f"Yanıt: {json.dumps(response_data, indent=2, ensure_ascii=False)}")
-            return []
-        
+        return []
+
         invoices = response_data['Data']['Invoices']
         print(f"✅ Otokoc API'den {len(invoices)} fatura verisi çekildi")
         
@@ -150,7 +150,7 @@ def get_invoice_data():
                     if 'T' in islem_saati:
                         # ISO format: 2025-03-05T16:30:00
                         islem_datetime = datetime.fromisoformat(islem_saati.replace('Z', '+00:00'))
-                    else:
+                else:
                         # Diğer olası formatlar
                         try:
                             islem_datetime = datetime.strptime(islem_saati, '%Y-%m-%d %H:%M:%S')
@@ -164,13 +164,13 @@ def get_invoice_data():
                     if islem_datetime.hour >= 16:
                         filtered_invoices.append(invoice)
                         print(f"✅ Fatura kabul edildi: {invoice.get('InvoiceNo', 'N/A')} - İşlem Saati: {islem_saati}")
-                    else:
+            else:
                         print(f"⏭️ Fatura filtrelendi (saat 16:00'dan önce): {invoice.get('InvoiceNo', 'N/A')} - İşlem Saati: {islem_saati}")
-                except Exception as e:
+    except Exception as e:
                     print(f"⚠️ Tarih dönüştürme hatası ({islem_saati}): {str(e)}")
                     # Hata durumunda faturayı dahil et (isteğe bağlı)
                     filtered_invoices.append(invoice)
-            else:
+                else:
                 # İşlem saati bilgisi yoksa faturayı dahil et
                 filtered_invoices.append(invoice)
                 print(f"⚠️ İşlem saati bilgisi olmayan fatura dahil edildi: {invoice.get('InvoiceNo', 'N/A')}")
@@ -234,7 +234,7 @@ def get_invoice_data():
         print(f"❌ Otokoc API fatura verileri çekme hatası: {str(e)}")
         traceback.print_exc()
         return []
-    except Exception as e:
+                        except Exception as e:
         print(f"❌ Otokoc API fatura verileri çekme hatası: {str(e)}")
         traceback.print_exc()
         return []
@@ -448,7 +448,7 @@ def send_telegram_notification(message):
             print(f"✅ Telegram bildirimi gönderildi")
         else:
             print(f"❌ Telegram bildirimi gönderilemedi: {response.text}")
-            
+
     except Exception as e:
         print(f"❌ Telegram bildirimi gönderilirken hata: {str(e)}")
         traceback.print_exc()
@@ -493,6 +493,7 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
         
         print(f"✅ Fatura verileri hazırlandı: {json.dumps(formatted_invoice_data, indent=2, ensure_ascii=False)}")
         
+        # xml_updater.py'den alınan XML güncelleme kodları
         # XML içeriğini güncelle
         tree = ET.fromstring(xml_content)
         
@@ -540,7 +541,6 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                 for district in address.findall("./cbc:CitySubdivisionName", namespaces=namespaces):
                     district.text = formatted_invoice_data['Ilce']
         
-        # SONHALI.py'den alınan tutar güncelleme kodları
         # Tutar bilgilerini güncelle
         # KDV tutarı
         for tax_total in tree.findall(".//cac:TaxTotal", namespaces=namespaces):
@@ -631,15 +631,36 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
         # Base64 kodlaması
         base64_xml = base64.b64encode(updated_xml.encode('utf-8')).decode('utf-8')
         
-        # SONHALI.py'den alınan doğru LoadInvoice çağrısı
+        # Doğru INVOICE yapısı
+        # Hata mesajından alınan imza:
+        # Signature: `HEADER: {...}, CONTENT: {...}, INVOICELINE: {...}[], TRXID: xsd:long, UUID: xsd:token, ID: xsd:token`
+        
         # Faturayı yükle
         request_header = {
             'SESSION_ID': session_id
         }
         
+        # INVOICE yapısını doğru şekilde oluştur
         invoice_data = {
+            'HEADER': {
+                'SENDER': 'urn:mail:defaultpk@edmbilisim.com.tr',
+                'RECEIVER': alias if alias else 'urn:mail:defaultpk@edmbilisim.com.tr',
+                'SUPPLIER': '6290272882',
+                'CUSTOMER': vkn,
+                'ISSUE_DATE': datetime.now().strftime('%Y-%m-%d'),
+                'PAYABLE_AMOUNT': {
+                    'VALUE': str(kdvli_toplam_tutar),
+                    'CURRENCY_CODE': 'TRY'
+                },
+                'FROM': 'urn:mail:defaultpk@edmbilisim.com.tr',
+                'TO': alias if alias else 'urn:mail:defaultpk@edmbilisim.com.tr',
+                'PROFILEID': 'TICARIFATURA',
+                'INVOICE_TYPE': 'SATIS',
+                'DIRECTION': 'OUT'
+            },
             'CONTENT': base64_xml,
-            'COMPRESSED': False
+            'UUID': str(uuid.uuid4()),
+            'ID': ka_no
         }
         
         sender_data = {
@@ -649,12 +670,12 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
         
         receiver_data = {
             'vkn': vkn,
-            'alias': alias
+            'alias': alias if alias else 'urn:mail:defaultpk@edmbilisim.com.tr'
         }
         
         load_params = {
             'REQUEST_HEADER': request_header,
-            'INVOICE': [invoice_data],
+            'INVOICE': [invoice_data],  # INVOICE bir dizi olmalı
             'SENDER': sender_data,
             'RECEIVER': receiver_data,
             'GENERATEINVOICEIDONLOAD': True
@@ -805,7 +826,7 @@ def load_processed_invoices():
         if os.path.exists(PROCESSED_INVOICES_FILE):
             with open(PROCESSED_INVOICES_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        else:
+            else:
             return {"processed_invoices": [], "last_check_time": None}
     except Exception as e:
         print(f"❌ İşlenmiş faturalar yüklenirken hata: {str(e)}")
@@ -880,7 +901,7 @@ EDM sistemine bağlanılamadı.
 """
             send_telegram_notification(error_notification)
             return
-        
+
         # İşlem başlangıç bildirimi
         start_notification = f"""
 <b>🚀 Yeni Fatura İşlemleri Başlatıldı</b>
@@ -976,7 +997,7 @@ EDM sistemine bağlanılamadı.
     except Exception as e:
         print(f"\n❌ Genel hata: {str(e)}")
         traceback.print_exc()
-        
+
         # Genel hata bildirimi
         error_notification = f"""
 <b>❌ Genel Hata</b>
@@ -992,7 +1013,6 @@ def main():
     try:
         print("\n🔄 Fatura işleme servisi başlatıldı")
         
-       
         
         send_telegram_notification("<b>🚀 Fatura İşleme Servisi Başlatıldı</b>")
         
