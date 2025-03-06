@@ -305,7 +305,7 @@ def check_user_and_get_info(client, session_id, vkn):
         turmob_header = {
             "SESSION_ID": session_id,
             "CLIENT_TXN_ID": str(uuid.uuid4()),
-            "ACTION_DATE": datetime.now().strftime("%Y-%m-%d"),
+            "ACTION_DATE": datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+03:00",
             "REASON": "test",
             "APPLICATION_NAME": "EDMTEST",
             "HOSTNAME": "BALCIAS",
@@ -569,6 +569,33 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                         party_name.text = formatted_invoice_data['TumMusteriAdi']
                         print(f"✅ Müşteri adı JSON'dan alındı: {formatted_invoice_data['TumMusteriAdi']}")
                 
+                # Vergi Dairesi güncelleme
+                tax_scheme_name = party.find('.//cac:PartyTaxScheme/cac:TaxScheme/cbc:Name', namespaces)
+                if tax_scheme_name is not None:
+                    tax_scheme_name.text = vergi_dairesi if vergi_dairesi else formatted_invoice_data['VergiDairesi']
+                    print(f"✅ Vergi dairesi güncellendi: {tax_scheme_name.text}")
+
+                # Adres bilgilerini güncelle
+                postal_address = party.find('.//cac:PostalAddress', namespaces)
+                if postal_address is not None:
+                    # Sokak/Cadde adresi
+                    street_name = postal_address.find('./cbc:StreetName', namespaces)
+                    if street_name is not None:
+                        street_name.text = tam_adres if tam_adres else formatted_invoice_data['Adres']
+                        print(f"✅ Adres güncellendi: {street_name.text}")
+
+                    # İl
+                    city_name = postal_address.find('./cbc:CityName', namespaces)
+                    if city_name is not None:
+                        city_name.text = il if il else formatted_invoice_data['Il']
+                        print(f"✅ İl güncellendi: {city_name.text}")
+
+                    # İlçe
+                    district = postal_address.find('./cbc:CitySubdivisionName', namespaces)
+                    if district is not None:
+                        district.text = ilce if ilce else formatted_invoice_data['Ilce']
+                        print(f"✅ İlçe güncellendi: {district.text}")
+
                 # Kişi bilgileri güncelleme
                 person = party.find('.//cac:Person', namespaces)
                 if person is not None:
@@ -1388,6 +1415,7 @@ def check_updated_xml(xml_path, invoice_data, namespaces):
 
 if __name__ == "__main__":
     main()
+
 
 
 
