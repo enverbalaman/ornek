@@ -1341,5 +1341,79 @@ def main():
 """
         send_telegram_notification(error_notification)
 
+# XML yapısını yazdırmak için yardımcı fonksiyon
+def print_xml_structure(element, indent="", max_depth=None, current_depth=0):
+    if max_depth is not None and current_depth > max_depth:
+        print(f"{indent}...")
+        return
+    
+    tag = element.tag
+    if '}' in tag:
+        tag = tag.split('}', 1)[1]  # Namespace'i kaldır
+    
+    attrs = ""
+    if element.attrib:
+        attrs = " " + " ".join([f"{k}='{v}'" for k, v in element.attrib.items()])
+    
+    text = element.text.strip() if element.text else ""
+    if text:
+        text = f" text='{text[:30]}...'" if len(text) > 30 else f" text='{text}'"
+    
+    print(f"{indent}<{tag}{attrs}{text}>")
+    
+    for child in element:
+        print_xml_structure(child, indent + "  ", max_depth, current_depth + 1)
+
+# Güncellenmiş XML'i kontrol etmek için yardımcı fonksiyon
+def check_updated_xml(xml_path, invoice_data, namespaces):
+    if not invoice_data:
+        print("⚠️ Fatura verileri olmadığı için XML kontrolü yapılamıyor")
+        return
+    
+    try:
+        tree = ET.parse(xml_path)
+        root = tree.getroot()
+        
+        # Plaka kontrolü
+        item_name = root.find(".//cac:Item/cbc:Name", namespaces)
+        if item_name is not None:
+            print(f"✅ XML'de Plaka: {item_name.text}")
+            if invoice_data['PlakaNo'] and invoice_data['PlakaNo'] in item_name.text:
+                print("✅ Plaka doğru şekilde güncellenmiş")
+            else:
+                print(f"❌ Plaka güncellemesi başarısız. Beklenen: {invoice_data['PlakaNo']}")
+        else:
+            print("❌ XML'de Item/Name elementi bulunamadı")
+        
+        # Kira günü kontrolü
+        invoiced_quantity = root.find(".//cbc:InvoicedQuantity", namespaces)
+        if invoiced_quantity is not None:
+            print(f"✅ XML'de Kira Günü: {invoiced_quantity.text}")
+            try:
+                expected = str(int(float(invoice_data['KiraGunu'])))
+                if invoiced_quantity.text == expected:
+                    print("✅ Kira günü doğru şekilde güncellenmiş")
+                else:
+                    print(f"❌ Kira günü güncellemesi başarısız. Beklenen: {expected}")
+            except (ValueError, TypeError):
+                print(f"⚠️ Kira günü karşılaştırması yapılamadı: {invoice_data['KiraGunu']}")
+        else:
+            print("❌ XML'de InvoicedQuantity elementi bulunamadı")
+        
+        # KiraTipi kontrolü
+        note_elements = root.findall(".//cbc:Note", namespaces)
+        kira_tipi_found = False
+        for note in note_elements:
+            if note.text and "Kira Tipi:" in note.text:
+                print(f"✅ XML'de Kira Tipi: {note.text}")
+                kira_tipi_found = True
+                break
+        
+        if not kira_tipi_found:
+            print("⚠️ XML'de Kira Tipi bilgisi bulunamadı")
+        
+    except Exception as e:
+        print(f"❌ XML kontrol hatası: {str(e)}")
+
 if __name__ == "__main__":
     main()
