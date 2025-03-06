@@ -463,7 +463,7 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
             # Kayıt verilerini formatla
             formatted_invoice_data = {
                 'VergiNumarasi': kayit.get('VergiNumarasi', ''),
-                'TumMusteriAdi': kayit.get('TumMusteriAdi', ''),  # ERTUTECH yazısını kaldırdık
+                'TumMusteriAdi': kayit.get('TumMusteriAdi', ''),
                 'KDVOrani': kayit.get('KDVOrani', 0),
                 'KDVTutari': kayit.get('KDVTutari', 0),
                 'KDVsizTutar': kayit.get('KDVsizTutar', 0),
@@ -477,6 +477,12 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                 'KiraTipi': kayit.get('KiraTipi', ''),
                 'PlakaNo': kayit.get('PlakaNo', '')
             }
+            
+            # Debug için tüm değerleri yazdır
+            print("\n🔍 Fatura verileri (XML güncellemesi için):")
+            for key, value in formatted_invoice_data.items():
+                print(f"   {key}: {value} (Tip: {type(value)})")
+            
             print(f"✅ Fatura verileri hazırlandı: {json.dumps(formatted_invoice_data, indent=2, ensure_ascii=False)}")
         else:
             print("⚠️ Kayıt verileri bulunamadı, sadece müşteri bilgileri güncellenecek")
@@ -493,8 +499,17 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
         ET.register_namespace('qdt', 'urn:oasis:names:specification:ubl:schema:xsd:QualifiedDatatypes-2')
         ET.register_namespace('ds', 'http://www.w3.org/2000/09/xmldsig#')
         
+        # XML dosyasını kontrol et
+        if not os.path.exists('ornek.xml'):
+            print("❌ ornek.xml dosyası bulunamadı!")
+            return False
+            
         tree = ET.parse('ornek.xml')
         root = tree.getroot()
+        
+        # XML yapısını debug için yazdır
+        print("\n🔍 XML yapısı analiz ediliyor...")
+        print_xml_structure(root, max_depth=3)
         
         namespaces = {
             'cac': 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2',
@@ -644,19 +659,45 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                 item_name_element.text = f"{formatted_invoice_data['PlakaNo']} PLAKALI ARAÇ KİRALAMA BEDELİ"
                 print(f"✅ Plaka güncellendi: {item_name_element.text}")
             else:
-                print(f"⚠️ Plaka güncellenemedi: PlakaNo={formatted_invoice_data['PlakaNo']}, Element bulundu mu: {item_name_element is not None}")
+                # Alternatif element arama
+                all_name_elements = root.findall(".//cbc:Name", namespaces)
+                print(f"⚠️ Plaka için Item/Name elementi bulunamadı. Toplam {len(all_name_elements)} Name elementi var.")
+                
+                # Alternatif olarak Description elementini dene
+                description_element = root.find(".//cbc:Description", namespaces)
+                if description_element is not None and formatted_invoice_data['PlakaNo']:
+                    description_element.text = f"{formatted_invoice_data['PlakaNo']} PLAKALI ARAÇ KİRALAMA BEDELİ"
+                    print(f"✅ Plaka (Description elementinde) güncellendi: {description_element.text}")
+                else:
+                    print(f"❌ Plaka güncellenemedi: PlakaNo={formatted_invoice_data['PlakaNo']}")
 
             # InvoicedQuantity güncelleme (Kira günü)
             invoiced_quantity_element = root.find(".//cbc:InvoicedQuantity", namespaces)
             if invoiced_quantity_element is not None:
                 try:
-                    invoiced_quantity_element.text = str(int(float(formatted_invoice_data['KiraGunu'])))
+                    # Kira günü değerini kontrol et
+                    kira_gunu = formatted_invoice_data['KiraGunu']
+                    if isinstance(kira_gunu, str) and not kira_gunu.strip():
+                        kira_gunu = '1'  # Boş string ise varsayılan değer
+                    
+                    invoiced_quantity_element.text = str(int(float(kira_gunu)))
                     print(f"✅ Kira günü güncellendi: {invoiced_quantity_element.text}")
                 except (ValueError, TypeError) as e:
                     print(f"⚠️ Kira günü güncellenemedi: {e}, KiraGunu={formatted_invoice_data['KiraGunu']}")
                     invoiced_quantity_element.text = "1"  # Varsayılan değer
+                    print(f"✅ Kira günü varsayılan değere ayarlandı: {invoiced_quantity_element.text}")
             else:
-                print("⚠️ InvoicedQuantity elementi bulunamadı")
+                # Alternatif element arama
+                quantity_elements = root.findall(".//*[contains(local-name(), 'Quantity')]", namespaces)
+                print(f"⚠️ InvoicedQuantity elementi bulunamadı. Toplam {len(quantity_elements)} Quantity elementi var.")
+                
+                if quantity_elements:
+                    # İlk quantity elementini güncelle
+                    try:
+                        quantity_elements[0].text = str(int(float(formatted_invoice_data['KiraGunu'])))
+                        print(f"✅ Alternatif Quantity elementi güncellendi: {quantity_elements[0].text}")
+                    except (ValueError, TypeError, IndexError) as e:
+                        print(f"❌ Alternatif Quantity elementi güncellenemedi: {e}")
 
             # PriceAmount güncelleme (Günlük fiyat)
             price_amount_element = root.find(".//cbc:PriceAmount", namespaces)
@@ -713,26 +754,30 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
 
             # Note elementlerini güncelle
             note_elements = root.findall(".//cbc:Note", namespaces)
-            if note_elements and len(note_elements) >= 2:
-                note_elements[0].text = f"Yazı ile: # {tutar_yazi} #"
-                note_elements[1].text = f"KA: {formatted_invoice_data['KANo']}"
-                print(f"✅ Note elementleri güncellendi")
-            else:
-                print(f"⚠️ Note elementleri güncellenemedi: {len(note_elements) if note_elements else 0} element bulundu")
-
-            # KiraTipi için özel bir alan varsa güncelle
-            # Örneğin, bir Description elementi olabilir
-            description_element = root.find(".//cbc:Description", namespaces)
-            if description_element is not None and formatted_invoice_data['KiraTipi']:
-                description_element.text = formatted_invoice_data['KiraTipi']
-                print(f"✅ KiraTipi güncellendi: {description_element.text}")
+            if note_elements and len(note_elements) >= 3 and formatted_invoice_data['KiraTipi']:
+                # Üçüncü Note elementini KiraTipi için kullan
+                note_elements[2].text = f"Kira Tipi: {formatted_invoice_data['KiraTipi']}"
+                print(f"✅ KiraTipi (Note elementinde) güncellendi: {note_elements[2].text}")
             elif formatted_invoice_data['KiraTipi']:
-                print("⚠️ KiraTipi için uygun element bulunamadı")
+                # Yeni bir Note elementi ekle
+                invoice_lines = root.findall(".//cac:InvoiceLine", namespaces)
+                if invoice_lines:
+                    invoice_line = invoice_lines[0]
+                    # Yeni Note elementi oluştur
+                    new_note = ET.SubElement(invoice_line, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
+                    new_note.text = f"Kira Tipi: {formatted_invoice_data['KiraTipi']}"
+                    print(f"✅ KiraTipi için yeni Note elementi eklendi: {new_note.text}")
+                else:
+                    print("❌ KiraTipi için InvoiceLine elementi bulunamadı")
 
         # Güncellenmiş XML'i kaydet
         updated_xml_path = 'updated_invoice.xml'
         tree.write(updated_xml_path, encoding='UTF-8', xml_declaration=True)
         print(f"✅ Güncellenmiş XML kaydedildi: {updated_xml_path}")
+        
+        # Güncellenmiş XML'i kontrol et
+        print("\n🔍 Güncellenmiş XML kontrol ediliyor...")
+        check_updated_xml(updated_xml_path, formatted_invoice_data, namespaces)
         
         # XML dosyasını oku ve base64 ile kodla
         with open(updated_xml_path, 'rb') as f:
