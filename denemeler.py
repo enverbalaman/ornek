@@ -27,6 +27,7 @@ def get_otokoc_token():
     
     try:
         print("\n🔑 Otokoc API'den token alınıyor...")
+        
         url = "https://merkezwebapi.otokoc.com.tr/STDealer/GetToken"
         payload = {
             "Username": "UrartuTrz",
@@ -34,17 +35,23 @@ def get_otokoc_token():
         }
         
         response = requests.post(url, json=payload)
+        response.raise_for_status()  # HTTP hatalarını yakala
         response_data = response.json()
         
-        if response.status_code == 200 and response_data.get('Success'):
-            otokoc_token = response_data['Data']['Token']
-            # Token geçerlilik süresi 4 dakika
-            token_expiry_time = datetime.now() + timedelta(minutes=4)
-            print(f"✅ Otokoc API'den token alındı. Geçerlilik: {token_expiry_time.strftime('%H:%M:%S')}")
-            return otokoc_token
-        else:
-            print(f"❌ Otokoc API token alınamadı: {response_data.get('Message', 'Bilinmeyen hata')}")
+        if 'Data' not in response_data or 'Token' not in response_data['Data']:
+            print(f"❌ Otokoc API token alınamadı: Geçersiz yanıt formatı")
+            print(f"Yanıt: {json.dumps(response_data, indent=2, ensure_ascii=False)}")
             return None
+        
+        otokoc_token = response_data['Data']['Token']
+        # Token geçerlilik süresi 4 dakika
+        token_expiry_time = datetime.now() + timedelta(minutes=4)
+        print(f"✅ Otokoc API'den token alındı. Geçerlilik: {token_expiry_time.strftime('%H:%M:%S')}")
+        return otokoc_token
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Otokoc API token alma hatası: {str(e)}")
+        traceback.print_exc()
+        return None
     except Exception as e:
         print(f"❌ Otokoc API token alma hatası: {str(e)}")
         traceback.print_exc()
@@ -74,12 +81,12 @@ def get_invoice_data():
         print("\n📊 Otokoc API'den fatura verileri çekiliyor...")
         url = "https://merkezwebapi.otokoc.com.tr/STDealer/GetInvoiceList"
         today = datetime.now().strftime("%Y%m%d")
-
+        yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
         payload = {
             "Token": token,
             "LicenseNo": 1,
             "InvoiceDate": "",
-            "StartDate": today,
+            "StartDate": yesterday,
             "EndDate": today
         }
         
