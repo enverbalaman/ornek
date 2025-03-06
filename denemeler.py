@@ -573,8 +573,16 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                 # VKN/TCKN güncelleme
                 id_element = party.find('.//cac:PartyIdentification/cbc:ID[@schemeID]', namespaces)
                 if id_element is not None:
-                    id_element.text = formatted_invoice_data['VergiNumarasi']
-                    print(f"✅ Müşteri VKN/TCKN güncellendi: {formatted_invoice_data['VergiNumarasi']}")
+                    vkn_value = formatted_invoice_data['VergiNumarasi'].strip()
+                    id_element.text = vkn_value
+                    
+                    # VKN/TCKN kontrolü ve schemeID düzeltmesi
+                    if len(vkn_value) == 11:  # 11 hane ise TCKN
+                        id_element.set('schemeID', 'TCKN')
+                        print(f"✅ Müşteri TCKN güncellendi: {vkn_value} (schemeID=TCKN)")
+                    else:  # 10 hane veya diğer durumlar için VKN
+                        id_element.set('schemeID', 'VKN')
+                        print(f"✅ Müşteri VKN güncellendi: {vkn_value} (schemeID=VKN)")
                 
                 # Müşteri adı güncelleme
                 party_name = party.find('.//cac:PartyName/cbc:Name', namespaces)
