@@ -103,20 +103,20 @@
     </ext:UBLExtensions>
     <cbc:UBLVersionID>2.1</cbc:UBLVersionID>
     <cbc:CustomizationID>TR1.2</cbc:CustomizationID>
-    <cbc:ProfileID>EARSIVFATURA</cbc:ProfileID>
+    <cbc:ProfileID>TICARIFATURA</cbc:ProfileID>
     <cbc:ID />
     <cbc:CopyIndicator>false</cbc:CopyIndicator>
-    <cbc:UUID>6916cb63-a2fd-41a6-b66d-a75ce562f129</cbc:UUID>
-    <cbc:IssueDate>2025-03-05</cbc:IssueDate>
-    <cbc:IssueTime>03:36:30</cbc:IssueTime>
+    <cbc:UUID>a3228e2d-400f-4ae8-a8c2-5c346a67e4d1</cbc:UUID>
+    <cbc:IssueDate>2025-03-06</cbc:IssueDate>
+    <cbc:IssueTime>03:03:38</cbc:IssueTime>
     <cbc:InvoiceTypeCode>SATIS</cbc:InvoiceTypeCode>
-    <cbc:Note>Yazı ile: # Üç Bin Altı Yüz TL #</cbc:Note>
-    <cbc:Note>KA: 20250224490</cbc:Note>
+    <cbc:Note>Yazı ile: # YEDİ BİN YEDİ YÜZ YETMİŞ YEDİ TÜRK LİRASI #</cbc:Note>
+    <cbc:Note>KA: 20250224792</cbc:Note>
     <cbc:DocumentCurrencyCode>TRY</cbc:DocumentCurrencyCode>
     <cbc:LineCountNumeric>1</cbc:LineCountNumeric>
     <cac:AdditionalDocumentReference>
         <cbc:ID>0a68ff77-6583-419d-9d2b-c2c4252acc42</cbc:ID>
-        <cbc:IssueDate>2025-03-05</cbc:IssueDate>
+        <cbc:IssueDate>2025-03-06</cbc:IssueDate>
         <cbc:DocumentType>XSLT</cbc:DocumentType>
         <cbc:DocumentDescription>Otomatik üretilmiştir.</cbc:DocumentDescription>
         <cac:Attachment>
@@ -194,7 +194,7 @@
     <cac:AccountingCustomerParty>
         <cac:Party>
             <cac:PartyIdentification>
-                <cbc:ID schemeID="VKN">6490193531</cbc:ID>
+                <cbc:ID schemeID="VKN">1760400686</cbc:ID>
             </cac:PartyIdentification>
             <cac:PartyIdentification>
                 <cbc:ID schemeID="SUBENO" />
@@ -203,12 +203,12 @@
                 <cbc:ID schemeID="MUSTERINO" />
             </cac:PartyIdentification>
             <cac:PartyName>
-                <cbc:Name>OTOKOÇ OTOMOTİV TİCARET VE SANAYİ ANONİM ŞİRKETİ</cbc:Name>
+                <cbc:Name>BİODOĞA ÇEVRE DANIŞMANLIK MÜHENDİSLİK İNŞAAT SANAYİ TİCARET LTD.ŞTİ.</cbc:Name>
             </cac:PartyName>
             <cac:PostalAddress>
-                <cbc:BuildingName>AYDINEVLER MAH. SAYGI CAD. 60</cbc:BuildingName>
-                <cbc:CitySubdivisionName>MALTEPE</cbc:CitySubdivisionName>
-                <cbc:CityName>İSTANBUL</cbc:CityName>
+                <cbc:BuildingName>BAHÇIVAN MAH. ABDURRAHMAN GAZİ 6. SK. MILTON APT 8 4</cbc:BuildingName>
+                <cbc:CitySubdivisionName>İPEKYOLU</cbc:CitySubdivisionName>
+                <cbc:CityName>VAN</cbc:CityName>
                 <cac:Country>
                     <cbc:IdentificationCode>TR</cbc:IdentificationCode>
                     <cbc:Name>Türkiye</cbc:Name>
@@ -216,24 +216,23 @@
             </cac:PostalAddress>
             <cac:PartyTaxScheme>
                 <cac:TaxScheme>
-                    <cbc:Name>BÜYÜK MÜKELLEFLER VERGİ DAİRESİ MÜD.</cbc:Name>
+                    <cbc:Name>VAN VERGİ DAİRESİ MÜD.</cbc:Name>
                 </cac:TaxScheme>
             </cac:PartyTaxScheme>
             <cac:Contact>
                 <cbc:Telephone />
                 <cbc:ElectronicMail />
             </cac:Contact>
-            <cac:Person><cbc:FirstName>RAMAZAN</cbc:FirstName><cbc:FamilyName>BAŞTÜRK</cbc:FamilyName></cac:Person>
-        </cac:Party>
+            </cac:Party>
     </cac:AccountingCustomerParty>
     <cac:PaymentTerms>
         <cbc:PaymentDueDate>2025-02-28</cbc:PaymentDueDate>
     </cac:PaymentTerms>
     <cac:TaxTotal>
-        <cbc:TaxAmount currencyID="TRY">600</cbc:TaxAmount>
+        <cbc:TaxAmount currencyID="TRY">1200.83</cbc:TaxAmount>
         <cac:TaxSubtotal>
-            <cbc:TaxableAmount currencyID="TRY">3000</cbc:TaxableAmount>
-            <cbc:TaxAmount currencyID="TRY">600</cbc:TaxAmount>
+            <cbc:TaxableAmount currencyID="TRY">5904.17</cbc:TaxableAmount>
+            <cbc:TaxAmount currencyID="TRY">1200.83</cbc:TaxAmount>
             <cbc:CalculationSequenceNumeric>1</cbc:CalculationSequenceNumeric>
             <cbc:Percent>20</cbc:Percent>
             <cac:TaxCategory>
@@ -245,21 +244,21 @@
         </cac:TaxSubtotal>
     </cac:TaxTotal>
     <cac:LegalMonetaryTotal>
-        <cbc:LineExtensionAmount currencyID="TRY">3000</cbc:LineExtensionAmount>
-        <cbc:TaxExclusiveAmount currencyID="TRY">3000</cbc:TaxExclusiveAmount>
-        <cbc:TaxInclusiveAmount currencyID="TRY">3600</cbc:TaxInclusiveAmount>
+        <cbc:LineExtensionAmount currencyID="TRY">5904.17</cbc:LineExtensionAmount>
+        <cbc:TaxExclusiveAmount currencyID="TRY">5904.17</cbc:TaxExclusiveAmount>
+        <cbc:TaxInclusiveAmount currencyID="TRY">7777.0</cbc:TaxInclusiveAmount>
         <cbc:AllowanceTotalAmount currencyID="TRY">0</cbc:AllowanceTotalAmount>
-        <cbc:PayableAmount currencyID="TRY">3600</cbc:PayableAmount>
+        <cbc:PayableAmount currencyID="TRY">7777.0</cbc:PayableAmount>
     </cac:LegalMonetaryTotal>
     <cac:InvoiceLine>
         <cbc:ID>1</cbc:ID>
-        <cbc:InvoicedQuantity unitCode="C62">1</cbc:InvoicedQuantity>
-        <cbc:LineExtensionAmount currencyID="TRY">3000</cbc:LineExtensionAmount>
+        <cbc:InvoicedQuantity unitCode="DAY">4</cbc:InvoicedQuantity>
+        <cbc:LineExtensionAmount currencyID="TRY">5904.17</cbc:LineExtensionAmount>
         <cac:TaxTotal>
-            <cbc:TaxAmount currencyID="TRY">600</cbc:TaxAmount>
+            <cbc:TaxAmount currencyID="TRY">1200.83</cbc:TaxAmount>
             <cac:TaxSubtotal>
-                <cbc:TaxableAmount currencyID="TRY">3000</cbc:TaxableAmount>
-                <cbc:TaxAmount currencyID="TRY">600</cbc:TaxAmount>
+                <cbc:TaxableAmount currencyID="TRY">5904.17</cbc:TaxableAmount>
+                <cbc:TaxAmount currencyID="TRY">1200.83</cbc:TaxAmount>
                 <cbc:CalculationSequenceNumeric>1</cbc:CalculationSequenceNumeric>
                 <cbc:Percent>20</cbc:Percent>
                 <cac:TaxCategory>
@@ -271,11 +270,11 @@
             </cac:TaxSubtotal>
         </cac:TaxTotal>
         <cac:Item>
-            <cbc:Name>34GHJ284 PLAKALI ARAÇ KİRALAMA BEDELİ</cbc:Name>
+            <cbc:Name>65ABZ697 PLAKALI ARAÇ KİRALAMA BEDELİ</cbc:Name>
             <cbc:BrandName />
         </cac:Item>
         <cac:Price>
-            <cbc:PriceAmount currencyID="TRY">3000</cbc:PriceAmount>
+            <cbc:PriceAmount currencyID="TRY">1476.04</cbc:PriceAmount>
         </cac:Price>
     </cac:InvoiceLine>
 </ns0:Invoice>
