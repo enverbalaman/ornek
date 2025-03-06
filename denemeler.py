@@ -186,8 +186,16 @@ def get_invoice_data():
         processed_data = load_processed_invoices()
         processed_invoices = processed_data["processed_invoices"]
         
-        # İşlenmemiş faturaları filtrele
-        unprocessed_invoices = [invoice for invoice in filtered_invoices if invoice.get('InvoiceNo') and invoice.get('InvoiceNo') not in processed_invoices]
+        # İşlenmemiş faturaları filtrele - KANo kontrolü
+        unprocessed_invoices = []
+        for invoice in filtered_invoices:
+            ka_no = invoice.get('KANo', '')
+            
+            if ka_no and ka_no not in processed_invoices:
+                unprocessed_invoices.append(invoice)
+                print(f"✅ Yeni fatura bulundu: {ka_no}")
+            else:
+                print(f"⏭️ Fatura zaten işlenmiş: {ka_no}")
         
         print(f"🔍 İşlenmemiş fatura sayısı: {len(unprocessed_invoices)}/{len(filtered_invoices)}")
         
@@ -1118,21 +1126,21 @@ def load_processed_invoices():
         return {"processed_invoices": [], "last_check_time": None}
 
 # İşlenmiş faturaları kaydet
-def save_processed_invoice(ka_no):
+def save_processed_invoice(invoice_no):
     try:
         processed_data = load_processed_invoices()
         
-        # KA numarası zaten işlenmişse ekleme
-        if ka_no not in processed_data["processed_invoices"]:
-            processed_data["processed_invoices"].append(ka_no)
+        # Fatura numarası zaten işlenmişse ekleme
+        if invoice_no not in processed_data["processed_invoices"]:
+            processed_data["processed_invoices"].append(invoice_no)
         
         # Son kontrol zamanını güncelle
         processed_data["last_check_time"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         with open(PROCESSED_INVOICES_FILE, 'w', encoding='utf-8') as f:
-            json.dump(processed_data, indent=2, ensure_ascii=False, fp=f)
+            json.dump(processed_data, f, indent=2, ensure_ascii=False)
         
-        print(f"✅ KA No: {ka_no} işlenmiş faturalar listesine eklendi")
+        print(f"✅ Fatura No: {invoice_no} işlenmiş faturalar listesine eklendi")
         return True
     except Exception as e:
         print(f"❌ İşlenmiş fatura kaydedilirken hata: {str(e)}")
@@ -1380,6 +1388,9 @@ def check_updated_xml(xml_path, invoice_data, namespaces):
 
 if __name__ == "__main__":
     main()
+
+
+
 
 
 
