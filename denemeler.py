@@ -643,12 +643,20 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
             if item_name_element is not None and formatted_invoice_data['PlakaNo']:
                 item_name_element.text = f"{formatted_invoice_data['PlakaNo']} PLAKALI ARAÇ KİRALAMA BEDELİ"
                 print(f"✅ Plaka güncellendi: {item_name_element.text}")
+            else:
+                print(f"⚠️ Plaka güncellenemedi: PlakaNo={formatted_invoice_data['PlakaNo']}, Element bulundu mu: {item_name_element is not None}")
 
             # InvoicedQuantity güncelleme (Kira günü)
             invoiced_quantity_element = root.find(".//cbc:InvoicedQuantity", namespaces)
             if invoiced_quantity_element is not None:
-                invoiced_quantity_element.text = str(int(float(formatted_invoice_data['KiraGunu'])))
-                print(f"✅ Kira günü güncellendi: {invoiced_quantity_element.text}")
+                try:
+                    invoiced_quantity_element.text = str(int(float(formatted_invoice_data['KiraGunu'])))
+                    print(f"✅ Kira günü güncellendi: {invoiced_quantity_element.text}")
+                except (ValueError, TypeError) as e:
+                    print(f"⚠️ Kira günü güncellenemedi: {e}, KiraGunu={formatted_invoice_data['KiraGunu']}")
+                    invoiced_quantity_element.text = "1"  # Varsayılan değer
+            else:
+                print("⚠️ InvoicedQuantity elementi bulunamadı")
 
             # PriceAmount güncelleme (Günlük fiyat)
             price_amount_element = root.find(".//cbc:PriceAmount", namespaces)
@@ -709,6 +717,17 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                 note_elements[0].text = f"Yazı ile: # {tutar_yazi} #"
                 note_elements[1].text = f"KA: {formatted_invoice_data['KANo']}"
                 print(f"✅ Note elementleri güncellendi")
+            else:
+                print(f"⚠️ Note elementleri güncellenemedi: {len(note_elements) if note_elements else 0} element bulundu")
+
+            # KiraTipi için özel bir alan varsa güncelle
+            # Örneğin, bir Description elementi olabilir
+            description_element = root.find(".//cbc:Description", namespaces)
+            if description_element is not None and formatted_invoice_data['KiraTipi']:
+                description_element.text = formatted_invoice_data['KiraTipi']
+                print(f"✅ KiraTipi güncellendi: {description_element.text}")
+            elif formatted_invoice_data['KiraTipi']:
+                print("⚠️ KiraTipi için uygun element bulunamadı")
 
         # Güncellenmiş XML'i kaydet
         updated_xml_path = 'updated_invoice.xml'
