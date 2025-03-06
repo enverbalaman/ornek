@@ -453,187 +453,557 @@ def send_telegram_notification(message):
         print(f"❌ Telegram bildirimi gönderilirken hata: {str(e)}")
         traceback.print_exc()
 
-def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, tam_adres, il, ilce, kayit):
+def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, tam_adres, il, ilce, kayit=None):
     try:
-        # XML şablonunu oku
-        with open('ornek.xml', 'r', encoding='utf-8') as f:
+        print("\n📝 XML güncelleniyor...")
+        
+        # E-Arşiv kontrolü
+        is_earchive = not alias  # alias yoksa E-Arşiv
+        print(f"✅ Fatura tipi: {'E-Arşiv' if is_earchive else 'E-Fatura'}")
+        
+        # Kayıt verileri varsa, bunları kullan
+        if kayit:
+            # Kayıt verilerini formatla
+            formatted_invoice_data = {
+                'VergiNumarasi': kayit.get('VergiNumarasi', ''),
+                'TumMusteriAdi': kayit.get('TumMusteriAdi', ''),  # ERTUTECH yazısını kaldırdık
+                'KDVOrani': kayit.get('KDVOrani', 0),
+                'KDVTutari': kayit.get('KDVTutari', 0),
+                'KDVsizTutar': kayit.get('KDVsizTutar', 0),
+                'KDVliToplamTutar': kayit.get('KDVliToplamTutar', 0),
+                'KiraGunu': kayit.get('KiraGunu', '1'),
+                'KANo': kayit.get('KANo', ''),
+                'Adres': tam_adres or kayit.get('Adres', ''),
+                'Il': il or kayit.get('Il', ''),
+                'Ilce': ilce or kayit.get('Ilce', ''),
+                'VergiDairesi': vergi_dairesi or kayit.get('VergiDairesi', ''),
+                'KiraTipi': kayit.get('KiraTipi', ''),
+                'PlakaNo': kayit.get('PlakaNo', ''),
+                'IslemSaati': kayit.get('IslemSaati', '')
+            }
+            print(f"✅ Fatura verileri hazırlandı: {json.dumps(formatted_invoice_data, indent=2, ensure_ascii=False)}")
+        else:
+            print("⚠️ Kayıt verileri bulunamadı, sadece müşteri bilgileri güncellenecek")
+            formatted_invoice_data = None
+        
+        # XML dosyasını oku ve namespace'leri koru
+        ET.register_namespace('cac', 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2')
+        ET.register_namespace('cbc', 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2')
+        ET.register_namespace('ext', 'urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2')
+        ET.register_namespace('xsi', 'http://www.w3.org/2001/XMLSchema-instance')
+        ET.register_namespace('xades', 'http://uri.etsi.org/01903/v1.3.2#')
+        ET.register_namespace('udt', 'urn:un:unece:uncefact:data:specification:UnqualifiedDataTypesSchemaModule:2')
+        ET.register_namespace('ubltr', 'urn:oasis:names:specification:ubl:schema:xsd:TurkishCustomizationExtensionComponents')
+        ET.register_namespace('qdt', 'urn:oasis:names:specification:ubl:schema:xsd:QualifiedDatatypes-2')
+        ET.register_namespace('ds', 'http://www.w3.org/2000/09/xmldsig#')
+        
+        tree = ET.parse('ornek.xml')
+        root = tree.getroot()
+        
+        namespaces = {
+            'cac': 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2',
+            'cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2'
+        }
+
+        # Güncel tarih ve saat
+        current_date = datetime.now().strftime('%Y-%m-%d')
+        current_time = datetime.now().strftime('%H:%M:%S')
+
+        # Tüm IssueDate elementlerini güncelle
+        for issue_date in root.findall('.//cbc:IssueDate', namespaces):
+            issue_date.text = current_date
+            print(f"✅ IssueDate güncellendi: {current_date}")
+
+        # IssueTime elementini güncelle
+        issue_time = root.find('.//cbc:IssueTime', namespaces)
+        if issue_time is not None:
+            issue_time.text = current_time
+            print(f"✅ IssueTime güncellendi: {current_time}")
+
+        # UUID ve ID güncelle
+        uuid_element = root.find('.//cbc:UUID', namespaces)
+        id_element = root.find('.//cbc:ID', namespaces)
+        
+        # Yeni UUID oluştur
+        new_uuid = str(uuid.uuid4())
+        
+        # UUID güncelle
+        if uuid_element is not None:
+            uuid_element.text = new_uuid
+            print(f"✅ UUID güncellendi: {new_uuid}")
+        
+        # ProfileID güncelleme - E-Arşiv kontrolü
+        profile_id = root.find('.//cbc:ProfileID', namespaces)
+        if profile_id is not None:
+            if is_earchive:
+                profile_id.text = "EARSIVFATURA"
+                print("✅ ProfileID EARSIVFATURA olarak güncellendi")
+            else:
+                profile_id.text = "TICARIFATURA"
+                print("✅ ProfileID TICARIFATURA olarak güncellendi")
+
+        # AccountingCustomerParty güncellemeleri
+        customer = root.find('.//cac:AccountingCustomerParty', namespaces)
+        if customer is not None:
+            party = customer.find('.//cac:Party', namespaces)
+            if party is not None:
+                # VKN/TCKN güncelleme
+                id_element = party.find('.//cac:PartyIdentification/cbc:ID[@schemeID]', namespaces)
+                if id_element is not None:
+                    if is_earchive:
+                        # E-Arşiv için TCKN olarak ayarla
+                        id_element.set('schemeID', 'TCKN')
+                        id_element.text = vkn
+                        print(f"✅ Müşteri TCKN güncellendi: {vkn}")
+                    else:
+                        # E-Fatura için VKN olarak ayarla
+                        id_element.set('schemeID', 'VKN')
+                        id_element.text = vkn
+                        print(f"✅ Müşteri VKN güncellendi: {vkn}")
+                
+                # Unvan güncelle
+                name_element = party.find('.//cac:PartyName/cbc:Name', namespaces)
+                if name_element is not None:
+                    # Fatura tipine göre unvan kaynağını belirle
+                    if is_earchive:
+                        # E-Arşiv için JSON'dan gelen TumMusteriAdi kullan
+                        if formatted_invoice_data:
+                            name_element.text = formatted_invoice_data['TumMusteriAdi']
+                            print(f"✅ Müşteri unvanı (E-Arşiv için JSON'dan) güncellendi: {name_element.text}")
+                        else:
+                            name_element.text = unvan if unvan else ""
+                            print(f"✅ Müşteri unvanı (E-Arşiv için) güncellendi: {name_element.text}")
+                    else:
+                        # E-Fatura için TURMOB'dan gelen kimlikUnvani kullan
+                        name_element.text = unvan if unvan else ""
+                        print(f"✅ Müşteri unvanı (E-Fatura için TURMOB'dan) güncellendi: {name_element.text}")
+                
+                # Person elementini kontrol et
+                person_element = party.find('.//cac:Person', namespaces)
+                
+                if is_earchive:
+                    # E-Arşiv için Person elementini ekle veya güncelle
+                    if person_element is None:
+                        # Person elementi yoksa oluştur
+                        person_element = ET.SubElement(party, '{urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2}Person')
+                        ET.SubElement(person_element, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}FirstName')
+                        ET.SubElement(person_element, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}FamilyName')
+                        print("✅ Person elementi oluşturuldu")
+                    
+                    # Ad-Soyad bölme işlemi
+                    # E-Arşiv için JSON'dan gelen TumMusteriAdi kullan
+                    customer_name = formatted_invoice_data['TumMusteriAdi'] if formatted_invoice_data else unvan
+                    if customer_name:
+                        name_parts = customer_name.split()
+                        if len(name_parts) > 0:
+                            last_name = name_parts[-1]  # Son kelime soyad
+                            first_name = " ".join(name_parts[:-1]) if len(name_parts) > 1 else ""  # Geri kalan kısım ad
+                            
+                            # FirstName güncelle
+                            first_name_element = person_element.find('./cbc:FirstName', namespaces)
+                            if first_name_element is not None:
+                                first_name_element.text = first_name
+                                print(f"✅ Müşteri adı güncellendi: {first_name}")
+                            
+                            # FamilyName güncelle
+                            family_name_element = person_element.find('./cbc:FamilyName', namespaces)
+                            if family_name_element is not None:
+                                family_name_element.text = last_name
+                                print(f"✅ Müşteri soyadı güncellendi: {last_name}")
+                else:
+                    # E-Fatura için Person elementini kaldır
+                    if person_element is not None:
+                        party.remove(person_element)
+                        print("✅ Person elementi kaldırıldı (E-Fatura için gerekli değil)")
+                
+                # Adres güncelle
+                address_element = party.find('.//cac:PostalAddress/cbc:BuildingName', namespaces)
+                if address_element is not None:
+                    address_element.text = tam_adres
+                    print(f"✅ Müşteri adresi güncellendi")
+                
+                # İlçe güncelle
+                subdivision_element = party.find('.//cac:PostalAddress/cbc:CitySubdivisionName', namespaces)
+                if subdivision_element is not None:
+                    subdivision_element.text = ilce
+                    print(f"✅ Müşteri ilçesi güncellendi: {ilce}")
+                
+                # İl güncelle
+                city_element = party.find('.//cac:PostalAddress/cbc:CityName', namespaces)
+                if city_element is not None:
+                    city_element.text = il
+                    print(f"✅ Müşteri ili güncellendi: {il}")
+                
+                # Vergi dairesi güncelle
+                tax_scheme_element = party.find('.//cac:PartyTaxScheme/cac:TaxScheme/cbc:Name', namespaces)
+                if tax_scheme_element is not None:
+                    tax_scheme_element.text = vergi_dairesi if vergi_dairesi else ""
+                    print(f"✅ Müşteri vergi dairesi güncellendi: {vergi_dairesi}")
+
+        # Kayıt verileri varsa, fatura detaylarını güncelle
+        if formatted_invoice_data:
+            # Item altındaki cbc:Name elementini PlakaNo ile güncelle
+            item_name_element = root.find(".//cac:Item/cbc:Name", namespaces)
+            if item_name_element is not None and formatted_invoice_data['PlakaNo']:
+                item_name_element.text = f"{formatted_invoice_data['PlakaNo']} PLAKALI ARAÇ KİRALAMA BEDELİ"
+                print(f"✅ Plaka güncellendi: {item_name_element.text}")
+
+            # InvoicedQuantity güncelleme (Kira günü)
+            invoiced_quantity_element = root.find(".//cbc:InvoicedQuantity", namespaces)
+            if invoiced_quantity_element is not None:
+                invoiced_quantity_element.text = str(int(float(formatted_invoice_data['KiraGunu'])))
+                print(f"✅ Kira günü güncellendi: {invoiced_quantity_element.text}")
+
+            # PriceAmount güncelleme (Günlük fiyat)
+            price_amount_element = root.find(".//cbc:PriceAmount", namespaces)
+            if price_amount_element is not None:
+                try:
+                    price_per_day = float(formatted_invoice_data['KDVsizTutar']) / float(formatted_invoice_data['KiraGunu'])
+                    price_amount_element.text = f"{price_per_day:.2f}"
+                    print(f"✅ Günlük fiyat güncellendi: {price_amount_element.text}")
+                except ZeroDivisionError:
+                    price_amount_element.text = "0.00"
+                    print("⚠️ Kira günü sıfır olduğu için günlük fiyat 0.00 olarak ayarlandı")
+
+            # KDV Oranı güncelleme
+            percent_element = root.find(".//cbc:Percent", namespaces)
+            if percent_element is not None:
+                percent_element.text = str(int(formatted_invoice_data['KDVOrani']))
+                print(f"✅ KDV oranı güncellendi: {percent_element.text}")
+
+            # TaxAmount güncelleme (KDV tutarı)
+            tax_amount_elements = root.findall(".//cbc:TaxAmount", namespaces)
+            for tax_amount_element in tax_amount_elements:
+                tax_amount_element.text = f"{formatted_invoice_data['KDVTutari']:.2f}"
+                print(f"✅ KDV tutarı güncellendi: {tax_amount_element.text}")
+
+            # KDVsiz tutar ile güncellenecek elementler
+            elements_to_update_kdvsiz = [
+                ".//cbc:TaxableAmount",
+                ".//cbc:LineExtensionAmount",
+                ".//cbc:TaxExclusiveAmount"
+            ]
+
+            for xpath in elements_to_update_kdvsiz:
+                elements = root.findall(xpath, namespaces)
+                for element in elements:
+                    if element is not None:
+                        element.text = str(formatted_invoice_data['KDVsizTutar'])
+                        print(f"✅ KDVsiz tutar güncellendi ({xpath}): {element.text}")
+
+            # KDVli tutar ile güncellenecek elementler
+            elements_to_update_kdvli = [
+                ".//cbc:TaxInclusiveAmount",
+                ".//cbc:PayableAmount"
+            ]
+
+            for xpath in elements_to_update_kdvli:
+                element = root.find(xpath, namespaces)
+                if element is not None:
+                    element.text = str(formatted_invoice_data['KDVliToplamTutar'])
+                    print(f"✅ KDVli tutar güncellendi ({xpath}): {element.text}")
+
+            # Toplam tutarı yazıya çevir
+            toplam_tutar = float(formatted_invoice_data['KDVliToplamTutar'])
+            tutar_yazi = sayi_to_yazi(toplam_tutar)
+
+            # Note elementlerini güncelle
+            note_elements = root.findall(".//cbc:Note", namespaces)
+            if note_elements and len(note_elements) >= 2:
+                note_elements[0].text = f"Yazı ile: # {tutar_yazi} #"
+                note_elements[1].text = f"KA: {formatted_invoice_data['KANo']}"
+                print(f"✅ Note elementleri güncellendi")
+
+        # Güncellenmiş XML'i kaydet
+        updated_xml_path = 'updated_invoice.xml'
+        tree.write(updated_xml_path, encoding='UTF-8', xml_declaration=True)
+        print(f"✅ Güncellenmiş XML kaydedildi: {updated_xml_path}")
+        
+        # XML dosyasını oku ve base64 ile kodla
+        with open(updated_xml_path, 'rb') as f:
             xml_content = f.read()
         
-        # Fatura verilerini hazırla
-        formatted_invoice_data = {
-            'VKN': vkn,
-            'Alias': alias,
-            'Unvan': unvan or kayit.get('TumMusteriAdi', ''),
-            'VergiDairesi': vergi_dairesi or kayit.get('VergiDairesi', ''),
-            'KiraTipi': kayit.get('KiraTipi', ''),
-            'PlakaNo': kayit.get('PlakaNo', ''),
-            'IslemSaati': kayit.get('IslemSaati', '')
+        encoded_content = base64.b64encode(xml_content).decode('utf-8')
+        print(f"✅ XML içeriği base64 ile kodlandı ({len(encoded_content)} karakter)")
+        
+        # LoadInvoice request header
+        request_header = {
+            "SESSION_ID": session_id,
+            "CLIENT_TXN_ID": str(uuid.uuid4()),
+            "ACTION_DATE": datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+03:00",
+            "REASON": "E-fatura/E-Arşiv gönder-al testleri için",
+            "APPLICATION_NAME": "EDM MINI CONNECTOR v1.0",
+            "HOSTNAME": "MDORA17",
+            "CHANNEL_NAME": "TEST",
+            "COMPRESSED": "N"
         }
-        
-        # Adres bilgilerini ekle
-        formatted_invoice_data['TamAdres'] = tam_adres or kayit.get('Adres', '')
-        formatted_invoice_data['Il'] = il or kayit.get('Il', '')
-        formatted_invoice_data['Ilce'] = ilce or kayit.get('Ilce', '')
-        
-        # Tutar bilgilerini ekle
-        kdv_orani = kayit.get('KDVOrani', 0)
-        kdv_tutari = kayit.get('KDVTutari', 0)
-        kdvsiz_tutar = kayit.get('KDVsizTutar', 0)
-        kdvli_toplam_tutar = kayit.get('KDVliToplamTutar', 0)
-        
-        formatted_invoice_data['KDVOrani'] = kdv_orani
-        formatted_invoice_data['KDVTutari'] = kdv_tutari
-        formatted_invoice_data['KDVsizTutar'] = kdvsiz_tutar
-        formatted_invoice_data['KDVliToplamTutar'] = kdvli_toplam_tutar
-        
-        # KA No ekle
-        formatted_invoice_data['KANo'] = kayit.get('KANo', '')
-        
-        print(f"✅ Fatura verileri hazırlandı: {json.dumps(formatted_invoice_data, indent=2, ensure_ascii=False)}")
-        
-        # XML içeriğini güncelle
-        tree = ET.fromstring(xml_content)
-        
-        # Müşteri bilgilerini güncelle
-        for party in tree.findall(".//cac:AccountingCustomerParty/cac:Party", namespaces={'cac': 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2'}):
-            # Unvan güncelle
-            for name in party.findall(".//cac:PartyName/cbc:Name", namespaces={'cac': 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2', 'cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2'}):
-                name.text = formatted_invoice_data['Unvan']
-            
-            # VKN güncelle
-            for id_elem in party.findall(".//cac:PartyIdentification/cbc:ID", namespaces={'cac': 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2', 'cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2'}):
-                if id_elem.get('schemeID') == 'VKN':
-                    id_elem.text = formatted_invoice_data['VKN']
-            
-            # Vergi dairesi güncelle
-            for tax_scheme in party.findall(".//cac:PartyTaxScheme/cac:TaxScheme/cbc:Name", namespaces={'cac': 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2', 'cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2'}):
-                tax_scheme.text = formatted_invoice_data['VergiDairesi']
-            
-            # Adres bilgilerini güncelle
-            for address in party.findall(".//cac:PostalAddress", namespaces={'cac': 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2'}):
-                for street_name in address.findall("./cbc:StreetName", namespaces={'cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2'}):
-                    street_name.text = formatted_invoice_data['TamAdres']
-                
-                for city_name in address.findall("./cbc:CityName", namespaces={'cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2'}):
-                    city_name.text = formatted_invoice_data['Il']
-                
-                for district in address.findall("./cbc:CitySubdivisionName", namespaces={'cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2'}):
-                    district.text = formatted_invoice_data['Ilce']
-        
-        # Tutar bilgilerini güncelle
-        # KDV tutarı 0 ise, istisna sebebi ekle
-        for tax_subtotal in tree.findall(".//cac:TaxSubtotal", namespaces={'cac': 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2'}):
-            tax_amount = tax_subtotal.find("./cbc:TaxAmount", namespaces={'cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2'})
-            tax_category = tax_subtotal.find("./cac:TaxCategory", namespaces={'cac': 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2'})
-            
-            if tax_amount is not None and float(tax_amount.text) == 0:
-                # KDV tutarı 0 ise ve TaxExemptionReason elemanı yoksa ekle
-                tax_exemption_reason = tax_category.find("./cbc:TaxExemptionReason", namespaces={'cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2'})
-                
-                if tax_exemption_reason is None:
-                    # TaxExemptionReason elemanı oluştur
-                    tax_exemption_reason = ET.SubElement(tax_category, "{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}TaxExemptionReason")
-                    tax_exemption_reason.text = "KDV İstisnası"
-                    print("✅ KDV tutarı 0 olduğu için TaxExemptionReason elemanı eklendi")
-        
-        # Güncellenmiş XML'i kaydet
-        updated_xml = ET.tostring(tree, encoding='utf-8', method='xml').decode('utf-8')
-        with open('updated_invoice.xml', 'w', encoding='utf-8') as f:
-            f.write(updated_xml)
-        
-        print("✅ XML başarıyla güncellendi ve kaydedildi")
-        
-        # Base64 kodlaması
-        base64_xml = base64.b64encode(updated_xml.encode('utf-8')).decode('utf-8')
-        
-        # Faturayı yükle
-        load_params = {
-            'sessionId': session_id,
-            'xmlContent': base64_xml,
-            'sourceUrn': alias,
-            'compressed': False
+
+        # Sender bilgileri
+        sender = {
+            "vkn": "8930043435",
+            "alias": "urn:mail:urartugb@edmbilisim.com"
         }
+
+        # Receiver bilgileri - E-Arşiv için özel ayarlama
+        if is_earchive:
+            receiver = {
+                "vkn": vkn,
+                "alias": ""  # E-Arşiv için boş alias
+            }
+            print("⚠️ E-Arşiv faturası için boş alias kullanılıyor")
+        else:
+            receiver = {
+                "vkn": vkn,
+                "alias": alias  # CheckUser'dan gelen tam alias değeri
+            }
+
+        print("\n📤 LoadInvoice Bilgileri:")
+        print(f"Sender: {json.dumps(sender, indent=2)}")
+        print(f"Receiver: {json.dumps(receiver, indent=2)}")
+        print(f"E-Arşiv mi?: {is_earchive}")
+
+        # Invoice içeriği
+        invoice = {
+            "TRXID": "0",
+            "HEADER": {
+                "SENDER": sender["vkn"],
+                "RECEIVER": receiver["vkn"],
+                "FROM": sender["alias"],
+                "TO": receiver["alias"] if not is_earchive else "",  # E-Arşiv için TO alanını boş bırak
+                "INTERNETSALES": False,
+                "EARCHIVE": is_earchive,  # E-Arşiv durumuna göre ayarla
+                "EARCHIVE_REPORT_SENDDATE": "0001-01-01",
+                "CANCEL_EARCHIVE_REPORT_SENDDATE": "0001-01-01",
+            },
+            "CONTENT": encoded_content
+        }
+
+        # Maksimum deneme sayısı
+        max_attempts = 3
+        retry_delay = 5  # saniye
         
-        try:
-            response = client.service.LoadInvoice(**load_params)
-            
-            if response and hasattr(response, 'IsSucceeded') and response.IsSucceeded:
-                print(f"\n✅ Fatura başarıyla yüklendi: {response.Message}")
+        for attempt in range(1, max_attempts + 1):
+            try:
+                print(f"\n📤 LoadInvoice isteği gönderiliyor... (Deneme {attempt}/{max_attempts})")
+                print(f"Request Header: {json.dumps(request_header, indent=2)}")
                 
-                # Başarılı işlemi kaydet
-                ka_no = formatted_invoice_data.get('KANo', '')
-                if ka_no:
-                    save_processed_invoice(ka_no)
+                # Parametreleri bir sözlük olarak hazırla
+                load_params = {
+                    "REQUEST_HEADER": request_header,
+                    "SENDER": sender,
+                    "RECEIVER": receiver,
+                    "INVOICE": [invoice],
+                    "GENERATEINVOICEIDONLOAD": True
+                }
                 
-                # Başarılı işlem bildirimi
-                success_notification = f"""
+                # Timeout ve detaylı loglama ekle
+                import time
+                print("⏳ LoadInvoice isteği başlatılıyor...")
+                start_time = time.time()
+                
+                # İsteği gönder
+                response = client.service.LoadInvoice(**load_params)
+                
+                end_time = time.time()
+                print(f"✅ LoadInvoice isteği tamamlandı ({end_time - start_time:.2f} saniye)")
+                
+                # Basit yanıt kontrolü
+                print("\n📥 LoadInvoice yanıtı alındı")
+                
+                # Yanıt içeriğini basit şekilde kontrol et
+                if response is None:
+                    print("⚠️ LoadInvoice yanıtı boş (None)")
+                    if attempt < max_attempts:
+                        print(f"⏳ {retry_delay} saniye bekleyip tekrar deneniyor...")
+                        time.sleep(retry_delay)
+                        continue
+                
+                # Yanıtı basit şekilde logla
+                print(f"Yanıt tipi: {type(response)}")
+                
+                # Başarı kontrolü - basitleştirilmiş
+                success = False
+                error_msg = ""
+                
+                try:
+                    if hasattr(response, 'INVOICE') and response.INVOICE:
+                        invoice_header = response.INVOICE[0].HEADER
+                        if hasattr(invoice_header, 'STATUS'):
+                            status = invoice_header.STATUS
+                            print(f"Fatura durumu: {status}")
+                            
+                            if status == 'LOAD - SUCCEED':
+                                success = True
+                                # Fatura ID ve UUID bilgilerini yazdır
+                                if hasattr(invoice_header, 'ID'):
+                                    print(f"📄 Fatura ID: {invoice_header.ID}")
+                                if hasattr(invoice_header, 'UUID'):
+                                    print(f"🔑 Fatura UUID: {invoice_header.UUID}")
+                    
+                    if hasattr(response, 'ERROR'):
+                        error_msg = response.ERROR
+                except Exception as e:
+                    print(f"⚠️ Yanıt işlenirken hata: {str(e)}")
+                
+                if success:
+                    print("\n✅ Fatura başarıyla yüklendi")
+                    
+                    # Telegram bildirimi gönder
+                    fatura_tipi = "E-Arşiv" if is_earchive else "E-Fatura"
+                    fatura_id = invoice_header.ID if hasattr(invoice_header, 'ID') else "Bilinmiyor"
+                    fatura_uuid = invoice_header.UUID if hasattr(invoice_header, 'UUID') else "Bilinmiyor"
+                    
+                    notification_message = f"""
 <b>✅ Fatura Başarıyla Yüklendi</b>
 
 <b>Fatura Bilgileri:</b>
+🔹 <b>Fatura Tipi:</b> {fatura_tipi}
+🔹 <b>Fatura ID:</b> {fatura_id}
+🔹 <b>Fatura UUID:</b> {fatura_uuid}
 🔹 <b>VKN/TCKN:</b> {vkn}
 🔹 <b>Müşteri:</b> {unvan}
 🔹 <b>KA No:</b> {formatted_invoice_data.get('KANo', 'Bilinmiyor') if formatted_invoice_data else 'Bilinmiyor'}
 
 <b>Tutar Bilgileri:</b>
-🔹 <b>KDV Oranı:</b> %{kdv_orani}
-🔹 <b>KDV Tutarı:</b> {kdv_tutari} TL
-🔹 <b>KDV'siz Tutar:</b> {kdvsiz_tutar} TL
-🔹 <b>Toplam Tutar:</b> {kdvli_toplam_tutar} TL
-
+"""
+                    if formatted_invoice_data:
+                        notification_message += f"""
+🔹 <b>KDV Oranı:</b> %{formatted_invoice_data['KDVOrani']}
+🔹 <b>KDV Tutarı:</b> {formatted_invoice_data['KDVTutari']} TL
+🔹 <b>KDV'siz Tutar:</b> {formatted_invoice_data['KDVsizTutar']} TL
+🔹 <b>Toplam Tutar:</b> {formatted_invoice_data['KDVliToplamTutar']} TL
+"""
+                    
+                    notification_message += f"""
 <b>İşlem Tarihi:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}
 """
-                send_telegram_notification(success_notification)
-                
-                return True
-            else:
-                error_message = response.Message if hasattr(response, 'Message') else "Bilinmeyen hata"
-                print(f"\n❌ Fatura yüklenemedi: {error_message}")
-                
-                # Hata bildirimi
-                error_notification = f"""
-<b>❌ Fatura Yükleme Hatası</b>
+                    
+                    # Bildirimi gönder
+                    send_telegram_notification(notification_message)
+                    
+                    # Başarılı işlemi kaydet
+                    if formatted_invoice_data and 'KANo' in formatted_invoice_data and formatted_invoice_data['KANo']:
+                        save_processed_invoice(formatted_invoice_data['KANo'])
+                    
+                    return True
+                else:
+                    if error_msg:
+                        print(f"\n❌ Fatura yükleme başarısız: {error_msg}")
+                        
+                        # GİB E-Fatura kapsamında bulunmuyor hatası kontrolü
+                        if "GİB E-Fatura kapsamında bulunmuyor" in error_msg:
+                            print("⚠️ GİB sisteminde geçici bir sorun olabilir.")
+                            if attempt < max_attempts:
+                                print(f"⏳ {retry_delay} saniye bekleyip tekrar deneniyor...")
+                                time.sleep(retry_delay)
+                                # Yeni bir session ID al
+                                try:
+                                    print("🔄 Yeni oturum açılıyor...")
+                                    new_client, new_session_id = edm_login()
+                                    if new_client and new_session_id:
+                                        client = new_client
+                                        session_id = new_session_id
+                                        request_header["SESSION_ID"] = session_id
+                                        print(f"✅ Yeni oturum açıldı: {session_id}")
+                                    else:
+                                        print("❌ Yeni oturum açılamadı")
+                                except Exception as login_error:
+                                    print(f"❌ Yeni oturum açma hatası: {str(login_error)}")
+                                continue
+                        
+                        # UUID çakışması hatası kontrolü
+                        if "Daha önce yüklediğiniz bir fatura" in error_msg:
+                            print("⚠️ UUID çakışması tespit edildi.")
+                            if attempt < max_attempts:
+                                print(f"⏳ Yeni UUID ile tekrar deneniyor...")
+                                # Yeni UUID oluştur
+                                new_uuid = str(uuid.uuid4())
+                                uuid_element = root.find('.//cbc:UUID', namespaces)
+                                if uuid_element is not None:
+                                    uuid_element.text = new_uuid
+                                    print(f"✅ UUID güncellendi: {new_uuid}")
+                                    
+                                    # Güncellenmiş XML'i kaydet
+                                    tree.write(updated_xml_path, encoding='UTF-8', xml_declaration=True)
+                                    
+                                    # XML dosyasını oku ve base64 ile kodla
+                                    with open(updated_xml_path, 'rb') as f:
+                                        xml_content = f.read()
+                                    
+                                    encoded_content = base64.b64encode(xml_content).decode('utf-8')
+                                    invoice["CONTENT"] = encoded_content
+                                    
+                                    continue
+                    else:
+                        print("\n❌ Fatura yükleme başarısız")
+                        
+                        # Maksimum deneme sayısına ulaşıldıysa hata bildirimi gönder
+                        if attempt >= max_attempts:
+                            error_notification = f"""
+<b>❌ Fatura Yükleme Başarısız</b>
 
 <b>Fatura Bilgileri:</b>
+🔹 <b>Fatura Tipi:</b> {"E-Arşiv" if is_earchive else "E-Fatura"}
 🔹 <b>VKN/TCKN:</b> {vkn}
 🔹 <b>Müşteri:</b> {unvan}
-🔹 <b>KA No:</b> {formatted_invoice_data.get('KANo', 'Bilinmiyor') if formatted_invoice_data else 'Bilinmiyor'}
 
 <b>Hata Mesajı:</b>
-{error_message}
+Bilinmeyen hata
 
 <b>İşlem Tarihi:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}
 """
-                send_telegram_notification(error_notification)
+                            send_telegram_notification(error_notification)
+                    
+                    if attempt < max_attempts:
+                        print(f"⏳ {retry_delay} saniye bekleyip tekrar deneniyor...")
+                        time.sleep(retry_delay)
+                        continue
+                    
+                    return False
+                    
+            except Exception as e:
+                print(f"\n❌ LoadInvoice hatası: {str(e)}")
+                traceback.print_exc()
                 
-                return False
-        except zeep.exceptions.Fault as e:
-            print(f"\n❌ LoadInvoice hatası: {str(e)}")
-            traceback.print_exc()
-            
-            # Hata bildirimi
-            error_notification = f"""
-<b>❌ Fatura Yükleme Hatası (SOAP)</b>
+                # Maksimum deneme sayısına ulaşıldıysa hata bildirimi gönder
+                if attempt >= max_attempts:
+                    error_notification = f"""
+<b>❌ LoadInvoice İşlemi Hatası</b>
 
 <b>Fatura Bilgileri:</b>
+🔹 <b>Fatura Tipi:</b> {"E-Arşiv" if is_earchive else "E-Fatura"}
 🔹 <b>VKN/TCKN:</b> {vkn}
 🔹 <b>Müşteri:</b> {unvan}
-🔹 <b>KA No:</b> {formatted_invoice_data.get('KANo', 'Bilinmiyor') if formatted_invoice_data else 'Bilinmiyor'}
 
 <b>Hata Mesajı:</b>
 {str(e)}
 
 <b>İşlem Tarihi:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}
 """
-            send_telegram_notification(error_notification)
+                    send_telegram_notification(error_notification)
+                
+                if attempt < max_attempts:
+                    print(f"⏳ {retry_delay} saniye bekleyip tekrar deneniyor... (Deneme {attempt}/{max_attempts})")
+                    time.sleep(retry_delay)
+                    continue
+                
+                return False
+        
+        # Tüm denemeler başarısız oldu
+        print("❌ Maksimum deneme sayısına ulaşıldı. İşlem başarısız.")
+        return False
             
-            return False
     except Exception as e:
         print(f"\n❌ XML güncelleme hatası: {str(e)}")
         traceback.print_exc()
         
-        # Hata bildirimi
+        # XML güncelleme hatası bildirimi gönder
         error_notification = f"""
 <b>❌ XML Güncelleme Hatası</b>
+
+<b>Fatura Bilgileri:</b>
+🔹 <b>VKN/TCKN:</b> {vkn}
+🔹 <b>Müşteri:</b> {unvan}
 
 <b>Hata Mesajı:</b>
 {str(e)}
@@ -885,8 +1255,6 @@ EDM sistemine bağlanılamadı.
 def main():
     try:
         print("\n🔄 Fatura işleme servisi başlatıldı")
-        
-        # Başlangıçta IP bilgilerini göster
         
         send_telegram_notification("<b>🚀 Fatura İşleme Servisi Başlatıldı</b>")
         
