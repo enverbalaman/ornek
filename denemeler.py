@@ -100,32 +100,134 @@ def get_invoice_data():
         response = requests.post(url, json=payload)
         response.raise_for_status()  # HTTP hatalarını yakala
         response_data = response.json()
-        if response.status_code == 200 and response_data.get('Success'):
-            invoices = response_data.get('Data', [])
-            print(f"✅ Otokoc API'den {len(invoices)} fatura verisi çekildi")
+        
+        if response_data.get('MessageEN') == "Token is expired":
+            print("❌ Token süresi dolmuş, yenileniyor...")
+            token = get_otokoc_token()
+            if not token:
+                return []
             
-            # Verileri kiralamaVeri.json formatına dönüştür
-            formatted_invoices = []
-            for invoice in invoices:
-                formatted_invoice = {
-                    'KANo': invoice.get('InvoiceNo', ''),
-                    'VergiNumarasi': invoice.get('TaxNo', ''),
-                    'TumMusteriAdi': invoice.get('CustomerName', ''),
-                    'VergiDairesi': invoice.get('TaxOffice', ''),
-                    'Adres': invoice.get('Address', ''),
-                    'Il': invoice.get('City', ''),
-                    'Ilce': invoice.get('District', ''),
-                    'KDVOrani': invoice.get('VatRate', 0),
-                    'KDVTutari': invoice.get('VatAmount', 0),
-                    'KDVsizTutar': invoice.get('NetAmount', 0),
-                    'KDVliToplamTutar': invoice.get('GrossAmount', 0)
-                }
-                formatted_invoices.append(formatted_invoice)
-            
-            return formatted_invoices
-        else:
-            print(f"❌ Otokoc API'den fatura verileri çekilemedi: {response_data.get('Message', 'Bilinmeyen hata')}")
+            # Yeni token ile tekrar dene
+            payload["Token"] = token
+            response = requests.post(url, json=payload)
+            response.raise_for_status()
+            response_data = response.json()
+        
+        if 'Data' not in response_data or 'Invoices' not in response_data['Data']:
+            print(f"❌ Otokoc API'den fatura verileri çekilemedi: Geçersiz yanıt formatı")
+            print(f"Yanıt: {json.dumps(response_data, indent=2, ensure_ascii=False)}")
             return []
+
+        invoices = response_data['Data']['Invoices']
+        print(f"✅ Otokoc API'den {len(invoices)} fatura verisi çekildi")
+        
+        # Yanıt formatını kontrol et ve debug için yazdır
+        if invoices and len(invoices) > 0:
+            print(f"\n🔍 Örnek fatura verisi:")
+            print(json.dumps(invoices[0], indent=2, ensure_ascii=False))
+            
+            # Tüm anahtar alanları listele
+            print("\n📋 Fatura veri alanları:")
+            for key in invoices[0].keys():
+                print(f"   - {key}: {invoices[0][key]}")
+        
+        # Saat 16:00'dan sonraki faturaları filtrele
+        filtered_invoices = []
+        for invoice in invoices:
+            # IslemSaati alanını kontrol et
+            islem_saati = invoice.get('IslemSaati', '')
+            if not islem_saati:
+                # IslemSaati yoksa alternatif alanları kontrol et
+                islem_saati = invoice.get('InvoiceDate', '')
+            
+            if islem_saati:
+                try:
+                    # Tarih formatını kontrol et
+                    if 'T' in islem_saati:
+                        # ISO format: 2025-03-05T16:30:00
+                        islem_datetime = datetime.fromisoformat(islem_saati.replace('Z', '+00:00'))
+                    else:
+                        # Diğer olası formatlar
+                        try:
+                            islem_datetime = datetime.strptime(islem_saati, '%Y-%m-%d %H:%M:%S')
+                        except ValueError:
+                            try:
+                                islem_datetime = datetime.strptime(islem_saati, '%d.%m.%Y %H:%M:%S')
+                            except ValueError:
+                                islem_datetime = datetime.strptime(islem_saati, '%d.%m.%Y')
+                    
+                    # Saat kontrolü - aynı gün 16:00'dan sonra mı?
+                    if islem_datetime.hour >= 16:
+                        filtered_invoices.append(invoice)
+                        print(f"✅ Fatura kabul edildi: {invoice.get('InvoiceNo', 'N/A')} - İşlem Saati: {islem_saati}")
+                    else:
+                        print(f"⏭️ Fatura filtrelendi (saat 16:00'dan önce): {invoice.get('InvoiceNo', 'N/A')} - İşlem Saati: {islem_saati}")
+                except Exception as e:
+                    print(f"⚠️ Tarih dönüştürme hatası ({islem_saati}): {str(e)}")
+                    # Hata durumunda faturayı dahil et (isteğe bağlı)
+                    filtered_invoices.append(invoice)
+            else:
+                # İşlem saati bilgisi yoksa faturayı dahil et
+                filtered_invoices.append(invoice)
+                print(f"⚠️ İşlem saati bilgisi olmayan fatura dahil edildi: {invoice.get('InvoiceNo', 'N/A')}")
+        
+        print(f"🔍 Filtreleme sonucu: {len(filtered_invoices)}/{len(invoices)} fatura işlenecek")
+        
+        # Verileri kiralamaVeri.json formatına dönüştür
+        formatted_invoices = []
+        for invoice in filtered_invoices:
+            # InvoiceNo veya KANo alanını kontrol et
+            ka_no = invoice.get('InvoiceNo', '')
+            if not ka_no:
+                ka_no = invoice.get('KANo', '')
+                if not ka_no:
+                    # Benzersiz bir ID oluştur
+                    ka_no = f"AUTO-{str(uuid.uuid4())[:8]}"
+                    print(f"⚠️ Fatura numarası bulunamadı, otomatik ID oluşturuldu: {ka_no}")
+            
+            # VKN alanını kontrol et - VergiNumarasi olarak geliyor
+            vkn = invoice.get('VergiNumarasi', '')
+            if not vkn:
+                # Alternatif alanları kontrol et
+                vkn = invoice.get('TaxNo', '')
+                if not vkn:
+                    vkn = invoice.get('VKN', '')
+                    if not vkn:
+                        vkn = invoice.get('TCKN', '')
+                        if not vkn:
+                            # Diğer olası alanları kontrol et
+                            for key in invoice.keys():
+                                if 'tax' in key.lower() or 'vkn' in key.lower() or 'vergi' in key.lower() or 'tckn' in key.lower():
+                                    vkn = invoice[key]
+                                    print(f"⚠️ VKN alternatif alandan alındı: {key}")
+                                    break
+            
+            # VKN yoksa uyarı ver
+            if not vkn:
+                print(f"⚠️ KA No: {ka_no} için VKN bulunamadı")
+            
+            formatted_invoice = {
+                'KANo': ka_no,
+                'VergiNumarasi': vkn,
+                'TumMusteriAdi': invoice.get('CustomerName', ''),
+                'VergiDairesi': invoice.get('TaxOffice', ''),
+                'Adres': invoice.get('Address', ''),
+                'Il': invoice.get('City', ''),
+                'Ilce': invoice.get('District', ''),
+                'KDVOrani': invoice.get('VatRate', 0),
+                'KDVTutari': invoice.get('VatAmount', 0),
+                'KDVsizTutar': invoice.get('NetAmount', 0),
+                'KDVliToplamTutar': invoice.get('GrossAmount', 0),
+                'IslemSaati': islem_saati
+            }
+            
+            formatted_invoices.append(formatted_invoice)
+        
+        return formatted_invoices
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Otokoc API fatura verileri çekme hatası: {str(e)}")
+        traceback.print_exc()
+        return []
     except Exception as e:
         print(f"❌ Otokoc API fatura verileri çekme hatası: {str(e)}")
         traceback.print_exc()
