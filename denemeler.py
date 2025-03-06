@@ -31,7 +31,6 @@ def get_otokoc_token():
         print("\n🔑 Otokoc API'den token alınıyor...")
         
         # IP bilgilerini al ve göster
-        
         url = "https://merkezwebapi.otokoc.com.tr/STDealer/GetToken"
         payload = {
             "Username": "UrartuTrz",
@@ -677,7 +676,7 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
             'RECEIVER': receiver_data,
             'GENERATEINVOICEIDONLOAD': True
         }
-        
+
         try:
             response = client.service.LoadInvoice(**load_params)
             
@@ -823,7 +822,7 @@ def load_processed_invoices():
         if os.path.exists(PROCESSED_INVOICES_FILE):
             with open(PROCESSED_INVOICES_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
-            else:
+        else:
             return {"processed_invoices": [], "last_check_time": None}
     except Exception as e:
         print(f"❌ İşlenmiş faturalar yüklenirken hata: {str(e)}")
@@ -1010,9 +1009,7 @@ def main():
     try:
         print("\n🔄 Fatura işleme servisi başlatıldı")
         
-        # Başlangıçta IP bilgilerini göster
-        
-        
+      
         send_telegram_notification("<b>🚀 Fatura İşleme Servisi Başlatıldı</b>")
         
         # İlk token'ı al
