@@ -106,9 +106,9 @@
     <cbc:ProfileID>TICARIFATURA</cbc:ProfileID>
     <cbc:ID />
     <cbc:CopyIndicator>false</cbc:CopyIndicator>
-    <cbc:UUID>a3228e2d-400f-4ae8-a8c2-5c346a67e4d1</cbc:UUID>
-    <cbc:IssueDate>2025-03-06</cbc:IssueDate>
-    <cbc:IssueTime>03:03:38</cbc:IssueTime>
+    <cbc:UUID>97ed06be-ac39-41d9-b5fb-5ad39afae493</cbc:UUID>
+    <cbc:IssueDate>2025-03-07</cbc:IssueDate>
+    <cbc:IssueTime>00:53:50</cbc:IssueTime>
     <cbc:InvoiceTypeCode>SATIS</cbc:InvoiceTypeCode>
     <cbc:Note>Yazı ile: # YEDİ BİN YEDİ YÜZ YETMİŞ YEDİ TÜRK LİRASI #</cbc:Note>
     <cbc:Note>KA: 20250224792</cbc:Note>
@@ -116,7 +116,7 @@
     <cbc:LineCountNumeric>1</cbc:LineCountNumeric>
     <cac:AdditionalDocumentReference>
         <cbc:ID>0a68ff77-6583-419d-9d2b-c2c4252acc42</cbc:ID>
-        <cbc:IssueDate>2025-03-06</cbc:IssueDate>
+        <cbc:IssueDate>2025-03-07</cbc:IssueDate>
         <cbc:DocumentType>XSLT</cbc:DocumentType>
         <cbc:DocumentDescription>Otomatik üretilmiştir.</cbc:DocumentDescription>
         <cac:Attachment>
@@ -206,9 +206,9 @@
                 <cbc:Name>BİODOĞA ÇEVRE DANIŞMANLIK MÜHENDİSLİK İNŞAAT SANAYİ TİCARET LTD.ŞTİ.</cbc:Name>
             </cac:PartyName>
             <cac:PostalAddress>
-                <cbc:BuildingName>BAHÇIVAN MAH. ABDURRAHMAN GAZİ 6. SK. MILTON APT 8 4</cbc:BuildingName>
-                <cbc:CitySubdivisionName>İPEKYOLU</cbc:CitySubdivisionName>
-                <cbc:CityName>VAN</cbc:CityName>
+                <cbc:BuildingName>ESKİŞEHİR MAH. BİLEZİKÇİ SK. AYDOĞAN APT 211 1</cbc:BuildingName>
+                <cbc:CitySubdivisionName>ŞİŞLİ</cbc:CitySubdivisionName>
+                <cbc:CityName>İSTANBUL</cbc:CityName>
                 <cac:Country>
                     <cbc:IdentificationCode>TR</cbc:IdentificationCode>
                     <cbc:Name>Türkiye</cbc:Name>
@@ -216,14 +216,15 @@
             </cac:PostalAddress>
             <cac:PartyTaxScheme>
                 <cac:TaxScheme>
-                    <cbc:Name>VAN VERGİ DAİRESİ MÜD.</cbc:Name>
+                    <cbc:Name>ŞİŞLİ VERGİ DAİRESİ MÜD.</cbc:Name>
                 </cac:TaxScheme>
             </cac:PartyTaxScheme>
             <cac:Contact>
                 <cbc:Telephone />
                 <cbc:ElectronicMail />
             </cac:Contact>
-            </cac:Party>
+            <cac:Person><cbc:FirstName>BİODOĞA ÇEVRE DANIŞMANLIK MÜHENDİSLİK İNŞAAT SANAYİ TİCARET</cbc:FirstName><cbc:FamilyName>LTD.ŞTİ.</cbc:FamilyName></cac:Person>
+        </cac:Party>
     </cac:AccountingCustomerParty>
     <cac:PaymentTerms>
         <cbc:PaymentDueDate>2025-02-28</cbc:PaymentDueDate>
@@ -246,9 +247,9 @@
     <cac:LegalMonetaryTotal>
         <cbc:LineExtensionAmount currencyID="TRY">5904.17</cbc:LineExtensionAmount>
         <cbc:TaxExclusiveAmount currencyID="TRY">5904.17</cbc:TaxExclusiveAmount>
-        <cbc:TaxInclusiveAmount currencyID="TRY">7777.0</cbc:TaxInclusiveAmount>
+        <cbc:TaxInclusiveAmount currencyID="TRY">7777.00</cbc:TaxInclusiveAmount>
         <cbc:AllowanceTotalAmount currencyID="TRY">0</cbc:AllowanceTotalAmount>
-        <cbc:PayableAmount currencyID="TRY">7777.0</cbc:PayableAmount>
+        <cbc:PayableAmount currencyID="TRY">7777.00</cbc:PayableAmount>
     </cac:LegalMonetaryTotal>
     <cac:InvoiceLine>
         <cbc:ID>1</cbc:ID>
@@ -276,5 +277,5 @@
         <cac:Price>
             <cbc:PriceAmount currencyID="TRY">1476.04</cbc:PriceAmount>
         </cac:Price>
-    </cac:InvoiceLine>
+    <cbc:Note>Kira Tipi: Günlük</cbc:Note></cac:InvoiceLine>
 </ns0:Invoice>

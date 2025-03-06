@@ -106,9 +106,9 @@
     <cbc:ProfileID>EARSIVFATURA</cbc:ProfileID>
     <cbc:ID />
     <cbc:CopyIndicator>false</cbc:CopyIndicator>
-    <cbc:UUID>6916cb63-a2fd-41a6-b66d-a75ce562f129</cbc:UUID>
-    <cbc:IssueDate>2025-03-05</cbc:IssueDate>
-    <cbc:IssueTime>03:36:30</cbc:IssueTime>
+    <cbc:UUID>c1f4cf4c-2b28-4e2a-8a74-ab6c01f2b9dd</cbc:UUID>
+    <cbc:IssueDate>2025-03-06</cbc:IssueDate>
+    <cbc:IssueTime>01:46:07</cbc:IssueTime>
     <cbc:InvoiceTypeCode>SATIS</cbc:InvoiceTypeCode>
     <cbc:Note>Yazı ile: # Üç Bin Altı Yüz TL #</cbc:Note>
     <cbc:Note>KA: 20250224490</cbc:Note>
@@ -116,7 +116,7 @@
     <cbc:LineCountNumeric>1</cbc:LineCountNumeric>
     <cac:AdditionalDocumentReference>
         <cbc:ID>0a68ff77-6583-419d-9d2b-c2c4252acc42</cbc:ID>
-        <cbc:IssueDate>2025-03-05</cbc:IssueDate>
+        <cbc:IssueDate>2025-03-06</cbc:IssueDate>
         <cbc:DocumentType>XSLT</cbc:DocumentType>
         <cbc:DocumentDescription>Otomatik üretilmiştir.</cbc:DocumentDescription>
         <cac:Attachment>
@@ -194,7 +194,7 @@
     <cac:AccountingCustomerParty>
         <cac:Party>
             <cac:PartyIdentification>
-                <cbc:ID schemeID="VKN">6490193531</cbc:ID>
+                <cbc:ID schemeID="VKN">4611150393</cbc:ID>
             </cac:PartyIdentification>
             <cac:PartyIdentification>
                 <cbc:ID schemeID="SUBENO" />
@@ -203,11 +203,11 @@
                 <cbc:ID schemeID="MUSTERINO" />
             </cac:PartyIdentification>
             <cac:PartyName>
-                <cbc:Name>OTOKOÇ OTOMOTİV TİCARET VE SANAYİ ANONİM ŞİRKETİ</cbc:Name>
+                <cbc:Name>HELPİST ASİSTANS DANIŞMANLIK VE TURİZM İNŞAAT YATIRIMLARI LİMİTED ŞİRKETİ</cbc:Name>
             </cac:PartyName>
             <cac:PostalAddress>
-                <cbc:BuildingName>AYDINEVLER MAH. SAYGI CAD. 60</cbc:BuildingName>
-                <cbc:CitySubdivisionName>MALTEPE</cbc:CitySubdivisionName>
+                <cbc:BuildingName>ESKİŞEHİR MAH. BİLEZİKÇİ SK. AYDOĞAN APT 211 1</cbc:BuildingName>
+                <cbc:CitySubdivisionName>ŞİŞLİ</cbc:CitySubdivisionName>
                 <cbc:CityName>İSTANBUL</cbc:CityName>
                 <cac:Country>
                     <cbc:IdentificationCode>TR</cbc:IdentificationCode>
@@ -216,7 +216,7 @@
             </cac:PostalAddress>
             <cac:PartyTaxScheme>
                 <cac:TaxScheme>
-                    <cbc:Name>BÜYÜK MÜKELLEFLER VERGİ DAİRESİ MÜD.</cbc:Name>
+                    <cbc:Name>ŞİŞLİ VERGİ DAİRESİ MÜD.</cbc:Name>
                 </cac:TaxScheme>
             </cac:PartyTaxScheme>
             <cac:Contact>
@@ -253,7 +253,7 @@
     </cac:LegalMonetaryTotal>
     <cac:InvoiceLine>
         <cbc:ID>1</cbc:ID>
-        <cbc:InvoicedQuantity unitCode="C62">1</cbc:InvoicedQuantity>
+        <cbc:InvoicedQuantity unitCode="DAY">1</cbc:InvoicedQuantity>
         <cbc:LineExtensionAmount currencyID="TRY">3000</cbc:LineExtensionAmount>
         <cac:TaxTotal>
             <cbc:TaxAmount currencyID="TRY">600</cbc:TaxAmount>

@@ -28,7 +28,7 @@ def get_otokoc_token():
     try:
         print("\n🔑 Otokoc API'den token alınıyor...")
         
-        # IP bilgilerini al ve göster
+        # API isteği için URL ve parametreler
         url = "https://merkezwebapi.otokoc.com.tr/STDealer/GetToken"
         payload = {
             "Username": "UrartuTrz",
@@ -221,12 +221,22 @@ def get_invoice_data():
                 'KiraGunu': invoice.get('RentalDays', '1'),  # Kira günü alanı eklendi
                 'KiraTipi': invoice.get('RentalType', ''),   # Kira tipi alanı eklendi
                 'PlakaNo': invoice.get('PlateNumber', ''),   # Plaka no alanı eklendi
-                'IslemSaati': invoice.get('IslemSaati', '')
+                'IslemSaati': islem_saati
             }
             
             formatted_invoices.append(formatted_invoice)
         
-        return formatted_invoices
+        # İşlenmiş faturaları yükle
+        processed_data = load_processed_invoices()
+        processed_invoices = processed_data["processed_invoices"]
+        
+        # İşlenmemiş faturaları filtrele
+        unprocessed_invoices = [invoice for invoice in formatted_invoices if invoice.get('KANo') and invoice.get('KANo') not in processed_invoices]
+        
+        print(f"🔍 İşlenmemiş fatura sayısı: {len(unprocessed_invoices)}/{len(formatted_invoices)}")
+        
+        return unprocessed_invoices
+        
     except requests.exceptions.RequestException as e:
         print(f"❌ Otokoc API fatura verileri çekme hatası: {str(e)}")
         traceback.print_exc()
@@ -584,64 +594,46 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                         id_element.set('schemeID', 'VKN')
                         print(f"✅ Müşteri VKN güncellendi: {vkn_value} (schemeID=VKN)")
                 
-                # Müşteri adı güncelleme
+                # Müşteri adı güncelleme - E-Fatura durumunda TURMOB'dan gelen unvan bilgisini kullan
                 party_name = party.find('.//cac:PartyName/cbc:Name', namespaces)
                 if party_name is not None:
-                    party_name.text = formatted_invoice_data['TumMusteriAdi']
-                    print(f"✅ Müşteri adı güncellendi: {formatted_invoice_data['TumMusteriAdi']}")
-                
-                # Adres bilgileri güncelleme
-                postal_address = party.find('.//cac:PostalAddress', namespaces)
-                if postal_address is not None:
-                    # İlçe güncelleme
-                    city_subdivision = postal_address.find('./cbc:CitySubdivisionName', namespaces)
-                    if city_subdivision is not None:
-                        city_subdivision.text = formatted_invoice_data['Ilce']
-                        print(f"✅ Müşteri ilçe güncellendi: {formatted_invoice_data['Ilce']}")
-                    
-                    # İl güncelleme
-                    city = postal_address.find('./cbc:CityName', namespaces)
-                    if city is not None:
-                        city.text = formatted_invoice_data['Il']
-                        print(f"✅ Müşteri il güncellendi: {formatted_invoice_data['Il']}")
-                    
-                    # Adres güncelleme - BuildingName elementine yazıyoruz
-                    building_name = postal_address.find('./cbc:BuildingName', namespaces)
-                    if building_name is not None:
-                        building_name.text = formatted_invoice_data['Adres']
-                        print(f"✅ Müşteri adres güncellendi: {formatted_invoice_data['Adres']}")
-                
-                # Vergi dairesi güncelleme
-                tax_scheme_element = party.find('.//cac:PartyTaxScheme/cac:TaxScheme/cbc:Name', namespaces)
-                if tax_scheme_element is not None:
-                    tax_scheme_element.text = formatted_invoice_data['VergiDairesi']
-                    print(f"✅ Müşteri vergi dairesi güncellendi: {formatted_invoice_data['VergiDairesi']}")
+                    # E-Fatura durumunda ve unvan bilgisi varsa TURMOB'dan gelen unvanı kullan
+                    if not is_earchive and unvan:
+                        party_name.text = unvan
+                        print(f"✅ Müşteri adı TURMOB'dan alındı: {unvan}")
+                    else:
+                        party_name.text = formatted_invoice_data['TumMusteriAdi']
+                        print(f"✅ Müşteri adı JSON'dan alındı: {formatted_invoice_data['TumMusteriAdi']}")
                 
                 # Kişi bilgileri güncelleme
                 person = party.find('.//cac:Person', namespaces)
-                if person is not None and formatted_invoice_data['TumMusteriAdi']:
-                    # İsim parçalarına ayır
-                    name_parts = formatted_invoice_data['TumMusteriAdi'].split()
-                    if len(name_parts) > 1:
-                        # Son kelime soyad, geri kalanı ad
-                        first_name = ' '.join(name_parts[:-1])
-                        family_name = name_parts[-1]
-                    else:
-                        # Tek kelime varsa, tamamı ad olsun
-                        first_name = formatted_invoice_data['TumMusteriAdi']
-                        family_name = "-"
+                if person is not None:
+                    # Kullanılacak isim - E-Fatura durumunda TURMOB'dan gelen unvanı kullan
+                    customer_name = unvan if not is_earchive and unvan else formatted_invoice_data['TumMusteriAdi']
                     
-                    # FirstName güncelleme
-                    first_name_element = person.find('./cbc:FirstName', namespaces)
-                    if first_name_element is not None:
-                        first_name_element.text = first_name
-                        print(f"✅ Müşteri adı güncellendi: {first_name}")
-                    
-                    # FamilyName güncelleme
-                    family_name_element = person.find('./cbc:FamilyName', namespaces)
-                    if family_name_element is not None:
-                        family_name_element.text = family_name
-                        print(f"✅ Müşteri soyadı güncellendi: {family_name}")
+                    if customer_name:
+                        # İsim parçalarına ayır
+                        name_parts = customer_name.split()
+                        if len(name_parts) > 1:
+                            # Son kelime soyad, geri kalanı ad
+                            first_name = ' '.join(name_parts[:-1])
+                            family_name = name_parts[-1]
+                        else:
+                            # Tek kelime varsa, tamamı ad olsun
+                            first_name = customer_name
+                            family_name = "-"
+                        
+                        # FirstName güncelleme
+                        first_name_element = person.find('./cbc:FirstName', namespaces)
+                        if first_name_element is not None:
+                            first_name_element.text = first_name
+                            print(f"✅ Müşteri adı güncellendi: {first_name}")
+                        
+                        # FamilyName güncelleme
+                        family_name_element = person.find('./cbc:FamilyName', namespaces)
+                        if family_name_element is not None:
+                            family_name_element.text = family_name
+                            print(f"✅ Müşteri soyadı güncellendi: {family_name}")
 
         # Kayıt verileri varsa, fatura detaylarını güncelle
         if formatted_invoice_data:
@@ -1192,26 +1184,15 @@ def save_processed_invoice(ka_no):
 
 def process_new_invoices():
     try:
-        # Önce işlenmiş faturaları yükle
-        processed_data = load_processed_invoices()
-        processed_invoices = processed_data["processed_invoices"]
-        
-        # Otokoc API'den fatura verilerini çek
+        # Fatura verilerini Otokoc API'den çek
         invoice_data = get_invoice_data()
         
         if not invoice_data:
             print("⚠️ İşlenecek fatura verisi bulunamadı")
             return
         
-        # İşlenmemiş faturaları filtrele
-        unprocessed_invoices = [kayit for kayit in invoice_data if kayit.get('KANo') and kayit.get('KANo') not in processed_invoices]
-        
-        if not unprocessed_invoices:
-            print(f"\n✅ İşlenecek yeni fatura bulunamadı. Toplam işlenmiş fatura: {len(processed_invoices)}")
-            return
-        
         # Yeni faturalar varsa EDM'ye bağlan
-        print(f"\n📋 Toplam {len(unprocessed_invoices)} yeni kayıt işlenecek")
+        print(f"\n📋 Toplam {len(invoice_data)} yeni kayıt işlenecek")
         
         # EDM'ye bağlan
         client, session_id = edm_login()
@@ -1234,7 +1215,7 @@ EDM sistemine bağlanılamadı.
         start_notification = f"""
 <b>🚀 Yeni Fatura İşlemleri Başlatıldı</b>
 
-<b>Toplam İşlenecek Kayıt:</b> {len(unprocessed_invoices)}
+<b>Toplam İşlenecek Kayıt:</b> {len(invoice_data)}
 <b>Başlangıç Tarihi:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}
 """
         send_telegram_notification(start_notification)
@@ -1244,12 +1225,12 @@ EDM sistemine bağlanılamadı.
         fail_count = 0
 
         # Her kayıt için işlem yap
-        for index, kayit in enumerate(unprocessed_invoices, 1):
+        for index, kayit in enumerate(invoice_data, 1):
             vkn = kayit.get('VergiNumarasi')  # VergiNumarasi alanını kullan
             ka_no = kayit.get('KANo', 'Bilinmiyor')
             
             print(f"\n{'='*50}")
-            print(f"🔄 Kayıt {index}/{len(unprocessed_invoices)} işleniyor")
+            print(f"🔄 Kayıt {index}/{len(invoice_data)} işleniyor")
             print(f"📝 VKN: {vkn}, KA No: {ka_no}")
             print(f"{'='*50}")
 
@@ -1264,7 +1245,7 @@ EDM sistemine bağlanılamadı.
             # E-fatura mükellefi değilse veya bilgiler alınamadıysa API'den gelen bilgileri kullan
             if not alias:
                 print(f"\n⚠️ VKN: {vkn} - Firma e-fatura mükellefi değil, E-Arşiv faturası olarak işlenecek")
-                # API'den gelen bilgileri kullan
+                # JSON'dan gelen bilgileri kullan
                 unvan = kayit.get('TumMusteriAdi', '')
                 vergi_dairesi = kayit.get('VergiDairesi', '')
                 tam_adres = kayit.get('Adres', '')
@@ -1283,9 +1264,9 @@ EDM sistemine bağlanılamadı.
             print(f"İlçe: {ilce}")
             print(f"KA No: {ka_no}")
 
-            # TURMOB'dan gelen adres bilgileri null ise API'den gelen bilgileri kullan
+            # TURMOB'dan gelen adres bilgileri null ise JSON'dan gelen bilgileri kullan
             if not tam_adres or not il or not ilce:
-                print("\n⚠️ Adres bilgileri eksik, API'den gelen bilgiler kullanılıyor")
+                print("\n⚠️ Adres bilgileri eksik, JSON'dan gelen bilgiler kullanılıyor")
                 tam_adres = kayit.get('Adres', '')
                 il = kayit.get('Il', '')
                 ilce = kayit.get('Ilce', '')
@@ -1294,6 +1275,8 @@ EDM sistemine bağlanılamadı.
             if update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, tam_adres, il, ilce, kayit):
                 print(f"\n✅ VKN: {vkn}, KA No: {ka_no} - İşlem başarıyla tamamlandı")
                 success_count += 1
+                # İşlenmiş faturalar listesine ekle
+                save_processed_invoice(ka_no)
             else:
                 print(f"\n❌ VKN: {vkn}, KA No: {ka_no} - İşlem başarısız")
                 fail_count += 1
@@ -1308,10 +1291,9 @@ EDM sistemine bağlanılamadı.
 <b>🏁 Yeni Fatura İşlemleri Tamamlandı</b>
 
 <b>Sonuç Özeti:</b>
-🔹 <b>Toplam İşlenen Kayıt:</b> {len(unprocessed_invoices)}
+🔹 <b>Toplam İşlenen Kayıt:</b> {len(invoice_data)}
 🔹 <b>Başarılı İşlem:</b> {success_count}
 🔹 <b>Başarısız İşlem:</b> {fail_count}
-🔹 <b>Toplam İşlenmiş Fatura:</b> {len(processed_data["processed_invoices"]) + success_count}
 
 <b>Bitiş Tarihi:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}
 """
