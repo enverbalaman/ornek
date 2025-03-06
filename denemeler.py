@@ -32,12 +32,11 @@ def get_otokoc_token():
         
         # IP bilgilerini al ve göster
         
-        
-    url = "https://merkezwebapi.otokoc.com.tr/STDealer/GetToken"
-    payload = {
-        "Username": "UrartuTrz",
-        "Password": "Tsv*57139!"
-    }
+        url = "https://merkezwebapi.otokoc.com.tr/STDealer/GetToken"
+        payload = {
+            "Username": "UrartuTrz",
+            "Password": "Tsv*57139!"
+        }
         
         response = requests.post(url, json=payload)
         response.raise_for_status()  # HTTP hatalarını yakala
@@ -85,22 +84,22 @@ def get_invoice_data():
         
         print("\n📊 Otokoc API'den fatura verileri çekiliyor...")
         
-    url = "https://merkezwebapi.otokoc.com.tr/STDealer/GetInvoiceList"
-    
+        url = "https://merkezwebapi.otokoc.com.tr/STDealer/GetInvoiceList"
+        
         # Dünün tarihini al
         yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
         today = datetime.now().strftime("%Y%m%d")
         
         print(f"🗓️ Tarih aralığı: {yesterday} - {today}")
 
-    payload = {
+        payload = {
             "Token": token,
             "LicenseNo": 1,
-        "InvoiceDate": "",
+            "InvoiceDate": "",
             "StartDate": yesterday,
             "EndDate": today
-    }
-    
+        }
+        
         response = requests.post(url, json=payload)
         response.raise_for_status()  # HTTP hatalarını yakala
         response_data = response.json()
@@ -109,8 +108,8 @@ def get_invoice_data():
             print("❌ Token süresi dolmuş, yenileniyor...")
             token = get_otokoc_token()
             if not token:
-            return []
-        
+                return []
+            
             # Yeni token ile tekrar dene
             payload["Token"] = token
             response = requests.post(url, json=payload)
@@ -120,7 +119,7 @@ def get_invoice_data():
         if 'Data' not in response_data or 'Invoices' not in response_data['Data']:
             print(f"❌ Otokoc API'den fatura verileri çekilemedi: Geçersiz yanıt formatı")
             print(f"Yanıt: {json.dumps(response_data, indent=2, ensure_ascii=False)}")
-        return []
+            return []
 
         invoices = response_data['Data']['Invoices']
         print(f"✅ Otokoc API'den {len(invoices)} fatura verisi çekildi")
@@ -150,7 +149,7 @@ def get_invoice_data():
                     if 'T' in islem_saati:
                         # ISO format: 2025-03-05T16:30:00
                         islem_datetime = datetime.fromisoformat(islem_saati.replace('Z', '+00:00'))
-                else:
+                    else:
                         # Diğer olası formatlar
                         try:
                             islem_datetime = datetime.strptime(islem_saati, '%Y-%m-%d %H:%M:%S')
@@ -164,13 +163,13 @@ def get_invoice_data():
                     if islem_datetime.hour >= 16:
                         filtered_invoices.append(invoice)
                         print(f"✅ Fatura kabul edildi: {invoice.get('InvoiceNo', 'N/A')} - İşlem Saati: {islem_saati}")
-            else:
+                    else:
                         print(f"⏭️ Fatura filtrelendi (saat 16:00'dan önce): {invoice.get('InvoiceNo', 'N/A')} - İşlem Saati: {islem_saati}")
-    except Exception as e:
+                except Exception as e:
                     print(f"⚠️ Tarih dönüştürme hatası ({islem_saati}): {str(e)}")
                     # Hata durumunda faturayı dahil et (isteğe bağlı)
                     filtered_invoices.append(invoice)
-                else:
+            else:
                 # İşlem saati bilgisi yoksa faturayı dahil et
                 filtered_invoices.append(invoice)
                 print(f"⚠️ İşlem saati bilgisi olmayan fatura dahil edildi: {invoice.get('InvoiceNo', 'N/A')}")
@@ -209,8 +208,6 @@ def get_invoice_data():
             # VKN yoksa uyarı ver
             if not vkn:
                 print(f"⚠️ KA No: {ka_no} için VKN bulunamadı")
-                # Test için varsayılan VKN atayabilirsiniz
-                # vkn = "1234567890"  # Varsayılan bir VKN
             
             formatted_invoice = {
                 'KANo': ka_no,
@@ -224,7 +221,7 @@ def get_invoice_data():
                 'KDVTutari': invoice.get('VatAmount', 0),
                 'KDVsizTutar': invoice.get('NetAmount', 0),
                 'KDVliToplamTutar': invoice.get('GrossAmount', 0),
-                'IslemSaati': invoice.get('IslemSaati', '')
+                'IslemSaati': islem_saati
             }
             
             formatted_invoices.append(formatted_invoice)
@@ -234,7 +231,7 @@ def get_invoice_data():
         print(f"❌ Otokoc API fatura verileri çekme hatası: {str(e)}")
         traceback.print_exc()
         return []
-                        except Exception as e:
+    except Exception as e:
         print(f"❌ Otokoc API fatura verileri çekme hatası: {str(e)}")
         traceback.print_exc()
         return []
@@ -1012,6 +1009,8 @@ EDM sistemine bağlanılamadı.
 def main():
     try:
         print("\n🔄 Fatura işleme servisi başlatıldı")
+        
+        # Başlangıçta IP bilgilerini göster
         
         
         send_telegram_notification("<b>🚀 Fatura İşleme Servisi Başlatıldı</b>")
