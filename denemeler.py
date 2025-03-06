@@ -478,6 +478,18 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                 'PlakaNo': kayit.get('PlakaNo', '')
             }
             
+            # Boş değerleri kontrol et ve varsayılan değerlerle doldur
+            for key in formatted_invoice_data:
+                if formatted_invoice_data[key] is None or formatted_invoice_data[key] == '':
+                    if key in ['KDVOrani', 'KDVTutari', 'KDVsizTutar', 'KDVliToplamTutar']:
+                        formatted_invoice_data[key] = 0
+                    elif key == 'KiraGunu':
+                        formatted_invoice_data[key] = '1'
+                    elif key == 'PlakaNo':
+                        formatted_invoice_data[key] = 'PLAKASIZ'
+                    else:
+                        formatted_invoice_data[key] = 'Belirtilmemiş'
+            
             # Debug için tüm değerleri yazdır
             print("\n🔍 Fatura verileri (XML güncellemesi için):")
             for key, value in formatted_invoice_data.items():
@@ -555,101 +567,73 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
 
         # AccountingCustomerParty güncellemeleri
         customer = root.find('.//cac:AccountingCustomerParty', namespaces)
-        if customer is not None:
+        if customer is not None and formatted_invoice_data:
             party = customer.find('.//cac:Party', namespaces)
             if party is not None:
                 # VKN/TCKN güncelleme
                 id_element = party.find('.//cac:PartyIdentification/cbc:ID[@schemeID]', namespaces)
                 if id_element is not None:
-                    if is_earchive:
-                        # E-Arşiv için TCKN olarak ayarla
-                        id_element.set('schemeID', 'TCKN')
-                        id_element.text = vkn
-                        print(f"✅ Müşteri TCKN güncellendi: {vkn}")
-                    else:
-                        # E-Fatura için VKN olarak ayarla
-                        id_element.set('schemeID', 'VKN')
-                        id_element.text = vkn
-                        print(f"✅ Müşteri VKN güncellendi: {vkn}")
+                    id_element.text = formatted_invoice_data['VergiNumarasi']
+                    print(f"✅ Müşteri VKN/TCKN güncellendi: {formatted_invoice_data['VergiNumarasi']}")
                 
-                # Unvan güncelle
-                name_element = party.find('.//cac:PartyName/cbc:Name', namespaces)
-                if name_element is not None:
-                    # Fatura tipine göre unvan kaynağını belirle
-                    if is_earchive:
-                        # E-Arşiv için JSON'dan gelen TumMusteriAdi kullan
-                        if formatted_invoice_data:
-                            name_element.text = formatted_invoice_data['TumMusteriAdi']
-                            print(f"✅ Müşteri unvanı (E-Arşiv için JSON'dan) güncellendi: {name_element.text}")
-                        else:
-                            name_element.text = unvan if unvan else ""
-                            print(f"✅ Müşteri unvanı (E-Arşiv için) güncellendi: {name_element.text}")
-                    else:
-                        # E-Fatura için TURMOB'dan gelen kimlikUnvani kullan
-                        name_element.text = unvan if unvan else ""
-                        print(f"✅ Müşteri unvanı (E-Fatura için TURMOB'dan) güncellendi: {name_element.text}")
+                # Müşteri adı güncelleme
+                party_name = party.find('.//cac:PartyName/cbc:Name', namespaces)
+                if party_name is not None:
+                    party_name.text = formatted_invoice_data['TumMusteriAdi']
+                    print(f"✅ Müşteri adı güncellendi: {formatted_invoice_data['TumMusteriAdi']}")
                 
-                # Person elementini kontrol et
-                person_element = party.find('.//cac:Person', namespaces)
-                
-                if is_earchive:
-                    # E-Arşiv için Person elementini ekle veya güncelle
-                    if person_element is None:
-                        # Person elementi yoksa oluştur
-                        person_element = ET.SubElement(party, '{urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2}Person')
-                        ET.SubElement(person_element, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}FirstName')
-                        ET.SubElement(person_element, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}FamilyName')
-                        print("✅ Person elementi oluşturuldu")
+                # Adres bilgileri güncelleme
+                postal_address = party.find('.//cac:PostalAddress', namespaces)
+                if postal_address is not None:
+                    # İlçe güncelleme
+                    city_subdivision = postal_address.find('./cbc:CitySubdivisionName', namespaces)
+                    if city_subdivision is not None:
+                        city_subdivision.text = formatted_invoice_data['Ilce']
+                        print(f"✅ Müşteri ilçe güncellendi: {formatted_invoice_data['Ilce']}")
                     
-                    # Ad-Soyad bölme işlemi
-                    # E-Arşiv için JSON'dan gelen TumMusteriAdi kullan
-                    customer_name = formatted_invoice_data['TumMusteriAdi'] if formatted_invoice_data else unvan
-                    if customer_name:
-                        name_parts = customer_name.split()
-                        if len(name_parts) > 0:
-                            last_name = name_parts[-1]  # Son kelime soyad
-                            first_name = " ".join(name_parts[:-1]) if len(name_parts) > 1 else ""  # Geri kalan kısım ad
-                            
-                            # FirstName güncelle
-                            first_name_element = person_element.find('./cbc:FirstName', namespaces)
-                            if first_name_element is not None:
-                                first_name_element.text = first_name
-                                print(f"✅ Müşteri adı güncellendi: {first_name}")
-                            
-                            # FamilyName güncelle
-                            family_name_element = person_element.find('./cbc:FamilyName', namespaces)
-                            if family_name_element is not None:
-                                family_name_element.text = last_name
-                                print(f"✅ Müşteri soyadı güncellendi: {last_name}")
-                else:
-                    # E-Fatura için Person elementini kaldır
-                    if person_element is not None:
-                        party.remove(person_element)
-                        print("✅ Person elementi kaldırıldı (E-Fatura için gerekli değil)")
+                    # İl güncelleme
+                    city = postal_address.find('./cbc:CityName', namespaces)
+                    if city is not None:
+                        city.text = formatted_invoice_data['Il']
+                        print(f"✅ Müşteri il güncellendi: {formatted_invoice_data['Il']}")
+                    
+                    # Adres güncelleme - BuildingName elementine yazıyoruz
+                    building_name = postal_address.find('./cbc:BuildingName', namespaces)
+                    if building_name is not None:
+                        building_name.text = formatted_invoice_data['Adres']
+                        print(f"✅ Müşteri adres güncellendi: {formatted_invoice_data['Adres']}")
                 
-                # Adres güncelle
-                address_element = party.find('.//cac:PostalAddress/cbc:BuildingName', namespaces)
-                if address_element is not None:
-                    address_element.text = tam_adres
-                    print(f"✅ Müşteri adresi güncellendi")
-                
-                # İlçe güncelle
-                subdivision_element = party.find('.//cac:PostalAddress/cbc:CitySubdivisionName', namespaces)
-                if subdivision_element is not None:
-                    subdivision_element.text = ilce
-                    print(f"✅ Müşteri ilçesi güncellendi: {ilce}")
-                
-                # İl güncelle
-                city_element = party.find('.//cac:PostalAddress/cbc:CityName', namespaces)
-                if city_element is not None:
-                    city_element.text = il
-                    print(f"✅ Müşteri ili güncellendi: {il}")
-                
-                # Vergi dairesi güncelle
+                # Vergi dairesi güncelleme
                 tax_scheme_element = party.find('.//cac:PartyTaxScheme/cac:TaxScheme/cbc:Name', namespaces)
                 if tax_scheme_element is not None:
-                    tax_scheme_element.text = vergi_dairesi if vergi_dairesi else ""
-                    print(f"✅ Müşteri vergi dairesi güncellendi: {vergi_dairesi}")
+                    tax_scheme_element.text = formatted_invoice_data['VergiDairesi']
+                    print(f"✅ Müşteri vergi dairesi güncellendi: {formatted_invoice_data['VergiDairesi']}")
+                
+                # Kişi bilgileri güncelleme
+                person = party.find('.//cac:Person', namespaces)
+                if person is not None and formatted_invoice_data['TumMusteriAdi']:
+                    # İsim parçalarına ayır
+                    name_parts = formatted_invoice_data['TumMusteriAdi'].split()
+                    if len(name_parts) > 1:
+                        # Son kelime soyad, geri kalanı ad
+                        first_name = ' '.join(name_parts[:-1])
+                        family_name = name_parts[-1]
+                    else:
+                        # Tek kelime varsa, tamamı ad olsun
+                        first_name = formatted_invoice_data['TumMusteriAdi']
+                        family_name = "-"
+                    
+                    # FirstName güncelleme
+                    first_name_element = person.find('./cbc:FirstName', namespaces)
+                    if first_name_element is not None:
+                        first_name_element.text = first_name
+                        print(f"✅ Müşteri adı güncellendi: {first_name}")
+                    
+                    # FamilyName güncelleme
+                    family_name_element = person.find('./cbc:FamilyName', namespaces)
+                    if family_name_element is not None:
+                        family_name_element.text = family_name
+                        print(f"✅ Müşteri soyadı güncellendi: {family_name}")
 
         # Kayıt verileri varsa, fatura detaylarını güncelle
         if formatted_invoice_data:
@@ -703,24 +687,41 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
             price_amount_element = root.find(".//cbc:PriceAmount", namespaces)
             if price_amount_element is not None:
                 try:
-                    price_per_day = float(formatted_invoice_data['KDVsizTutar']) / float(formatted_invoice_data['KiraGunu'])
-                    price_amount_element.text = f"{price_per_day:.2f}"
-                    print(f"✅ Günlük fiyat güncellendi: {price_amount_element.text}")
-                except ZeroDivisionError:
+                    # KDVsizTutar ve KiraGunu değerlerini kontrol et
+                    kdvsiz_tutar = float(formatted_invoice_data['KDVsizTutar'])
+                    kira_gunu = float(formatted_invoice_data['KiraGunu']) if formatted_invoice_data['KiraGunu'] else 1
+                    
+                    if kira_gunu > 0:
+                        price_per_day = kdvsiz_tutar / kira_gunu
+                        price_amount_element.text = f"{price_per_day:.2f}"
+                        print(f"✅ Günlük fiyat güncellendi: {price_amount_element.text}")
+                    else:
+                        price_amount_element.text = f"{kdvsiz_tutar:.2f}"
+                        print("⚠️ Kira günü sıfır olduğu için toplam tutar günlük fiyat olarak ayarlandı")
+                except (ValueError, ZeroDivisionError) as e:
                     price_amount_element.text = "0.00"
-                    print("⚠️ Kira günü sıfır olduğu için günlük fiyat 0.00 olarak ayarlandı")
+                    print(f"⚠️ Günlük fiyat hesaplanamadı: {e}, varsayılan değer 0.00 olarak ayarlandı")
 
             # KDV Oranı güncelleme
             percent_element = root.find(".//cbc:Percent", namespaces)
             if percent_element is not None:
-                percent_element.text = str(int(formatted_invoice_data['KDVOrani']))
-                print(f"✅ KDV oranı güncellendi: {percent_element.text}")
+                try:
+                    percent_element.text = str(int(float(formatted_invoice_data['KDVOrani'])))
+                    print(f"✅ KDV oranı güncellendi: {percent_element.text}")
+                except (ValueError, TypeError) as e:
+                    print(f"⚠️ KDV oranı güncellenemedi: {e}, KDVOrani={formatted_invoice_data['KDVOrani']}")
+                    percent_element.text = "0"  # Varsayılan değer
 
             # TaxAmount güncelleme (KDV tutarı)
             tax_amount_elements = root.findall(".//cbc:TaxAmount", namespaces)
             for tax_amount_element in tax_amount_elements:
-                tax_amount_element.text = f"{formatted_invoice_data['KDVTutari']:.2f}"
-                print(f"✅ KDV tutarı güncellendi: {tax_amount_element.text}")
+                try:
+                    kdv_tutari = float(formatted_invoice_data['KDVTutari'])
+                    tax_amount_element.text = f"{kdv_tutari:.2f}"
+                    print(f"✅ KDV tutarı güncellendi: {tax_amount_element.text}")
+                except (ValueError, TypeError) as e:
+                    print(f"⚠️ KDV tutarı güncellenemedi: {e}, KDVTutari={formatted_invoice_data['KDVTutari']}")
+                    tax_amount_element.text = "0.00"  # Varsayılan değer
 
             # KDVsiz tutar ile güncellenecek elementler
             elements_to_update_kdvsiz = [
@@ -733,8 +734,13 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                 elements = root.findall(xpath, namespaces)
                 for element in elements:
                     if element is not None:
-                        element.text = str(formatted_invoice_data['KDVsizTutar'])
-                        print(f"✅ KDVsiz tutar güncellendi ({xpath}): {element.text}")
+                        try:
+                            kdvsiz_tutar = float(formatted_invoice_data['KDVsizTutar'])
+                            element.text = f"{kdvsiz_tutar:.2f}"
+                            print(f"✅ KDVsiz tutar güncellendi ({xpath}): {element.text}")
+                        except (ValueError, TypeError) as e:
+                            print(f"⚠️ KDVsiz tutar güncellenemedi: {e}, KDVsizTutar={formatted_invoice_data['KDVsizTutar']}")
+                            element.text = "0.00"  # Varsayılan değer
 
             # KDVli tutar ile güncellenecek elementler
             elements_to_update_kdvli = [
@@ -745,30 +751,50 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
             for xpath in elements_to_update_kdvli:
                 element = root.find(xpath, namespaces)
                 if element is not None:
-                    element.text = str(formatted_invoice_data['KDVliToplamTutar'])
-                    print(f"✅ KDVli tutar güncellendi ({xpath}): {element.text}")
+                    try:
+                        kdvli_tutar = float(formatted_invoice_data['KDVliToplamTutar'])
+                        element.text = f"{kdvli_tutar:.2f}"
+                        print(f"✅ KDVli tutar güncellendi ({xpath}): {element.text}")
+                    except (ValueError, TypeError) as e:
+                        print(f"⚠️ KDVli tutar güncellenemedi: {e}, KDVliToplamTutar={formatted_invoice_data['KDVliToplamTutar']}")
+                        element.text = "0.00"  # Varsayılan değer
 
             # Toplam tutarı yazıya çevir
-            toplam_tutar = float(formatted_invoice_data['KDVliToplamTutar'])
-            tutar_yazi = sayi_to_yazi(toplam_tutar)
+            try:
+                toplam_tutar = float(formatted_invoice_data['KDVliToplamTutar'])
+                tutar_yazi = sayi_to_yazi(toplam_tutar)
+            except (ValueError, TypeError) as e:
+                print(f"⚠️ Tutar yazıya çevrilemedi: {e}")
+                tutar_yazi = "Sıfır TL"
 
             # Note elementlerini güncelle
             note_elements = root.findall(".//cbc:Note", namespaces)
-            if note_elements and len(note_elements) >= 3 and formatted_invoice_data['KiraTipi']:
+            if note_elements:
+                # İlk Note elementini tutar yazısı için kullan
+                if len(note_elements) >= 1:
+                    note_elements[0].text = f"Yazı ile: # {tutar_yazi} #"
+                    print(f"✅ Tutar yazı ile güncellendi: {note_elements[0].text}")
+                
+                # İkinci Note elementini KA numarası için kullan
+                if len(note_elements) >= 2:
+                    note_elements[1].text = f"KA: {formatted_invoice_data['KANo']}"
+                    print(f"✅ KA numarası güncellendi: {note_elements[1].text}")
+                
                 # Üçüncü Note elementini KiraTipi için kullan
-                note_elements[2].text = f"Kira Tipi: {formatted_invoice_data['KiraTipi']}"
-                print(f"✅ KiraTipi (Note elementinde) güncellendi: {note_elements[2].text}")
-            elif formatted_invoice_data['KiraTipi']:
-                # Yeni bir Note elementi ekle
-                invoice_lines = root.findall(".//cac:InvoiceLine", namespaces)
-                if invoice_lines:
-                    invoice_line = invoice_lines[0]
-                    # Yeni Note elementi oluştur
-                    new_note = ET.SubElement(invoice_line, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
-                    new_note.text = f"Kira Tipi: {formatted_invoice_data['KiraTipi']}"
-                    print(f"✅ KiraTipi için yeni Note elementi eklendi: {new_note.text}")
-                else:
-                    print("❌ KiraTipi için InvoiceLine elementi bulunamadı")
+                if len(note_elements) >= 3 and formatted_invoice_data['KiraTipi']:
+                    note_elements[2].text = f"Kira Tipi: {formatted_invoice_data['KiraTipi']}"
+                    print(f"✅ KiraTipi (Note elementinde) güncellendi: {note_elements[2].text}")
+                elif formatted_invoice_data['KiraTipi']:
+                    # Yeni bir Note elementi ekle
+                    invoice_lines = root.findall(".//cac:InvoiceLine", namespaces)
+                    if invoice_lines:
+                        invoice_line = invoice_lines[0]
+                        # Yeni Note elementi oluştur
+                        new_note = ET.SubElement(invoice_line, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
+                        new_note.text = f"Kira Tipi: {formatted_invoice_data['KiraTipi']}"
+                        print(f"✅ KiraTipi için yeni Note elementi eklendi: {new_note.text}")
+                    else:
+                        print("❌ KiraTipi için InvoiceLine elementi bulunamadı")
 
         # Güncellenmiş XML'i kaydet
         updated_xml_path = 'updated_invoice.xml'
