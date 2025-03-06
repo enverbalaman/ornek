@@ -29,7 +29,9 @@ def get_otokoc_token():
     
     try:
         print("\n🔑 Otokoc API'den token alınıyor...")
-            
+        
+        # IP bilgilerini al ve göster
+        
         
         url = "https://merkezwebapi.otokoc.com.tr/STDealer/GetToken"
         payload = {
@@ -82,7 +84,6 @@ def get_invoice_data():
             return []
         
         print("\n📊 Otokoc API'den fatura verileri çekiliyor...")
-
         
         url = "https://merkezwebapi.otokoc.com.tr/STDealer/GetInvoiceList"
         
@@ -123,6 +124,11 @@ def get_invoice_data():
         
         invoices = response_data['Data']['Invoices']
         print(f"✅ Otokoc API'den {len(invoices)} fatura verisi çekildi")
+        
+        # Yanıt formatını kontrol et ve debug için yazdır
+        if invoices and len(invoices) > 0:
+            print(f"\n🔍 Örnek fatura verisi:")
+            print(json.dumps(invoices[0], indent=2, ensure_ascii=False))
         
         # Saat 16:00'dan sonraki faturaları filtrele
         filtered_invoices = []
@@ -169,8 +175,17 @@ def get_invoice_data():
         # Verileri kiralamaVeri.json formatına dönüştür
         formatted_invoices = []
         for invoice in filtered_invoices:
+            # InvoiceNo veya KANo alanını kontrol et
+            ka_no = invoice.get('InvoiceNo', '')
+            if not ka_no:
+                ka_no = invoice.get('KANo', '')
+                if not ka_no:
+                    # Benzersiz bir ID oluştur
+                    ka_no = f"AUTO-{str(uuid.uuid4())[:8]}"
+                    print(f"⚠️ Fatura numarası bulunamadı, otomatik ID oluşturuldu: {ka_no}")
+            
             formatted_invoice = {
-                'KANo': invoice.get('InvoiceNo', ''),
+                'KANo': ka_no,
                 'VergiNumarasi': invoice.get('TaxNo', ''),
                 'TumMusteriAdi': invoice.get('CustomerName', ''),
                 'VergiDairesi': invoice.get('TaxOffice', ''),
@@ -1066,7 +1081,16 @@ def process_new_invoices():
             return
         
         # İşlenmemiş faturaları filtrele
-        unprocessed_invoices = [kayit for kayit in invoice_data if kayit.get('KANo') and kayit.get('KANo') not in processed_invoices]
+        unprocessed_invoices = []
+        for kayit in invoice_data:
+            ka_no = kayit.get('KANo', '')
+            if ka_no and ka_no not in processed_invoices:
+                unprocessed_invoices.append(kayit)
+                print(f"✅ İşlenecek yeni fatura: KA No: {ka_no}")
+            elif ka_no in processed_invoices:
+                print(f"⏭️ Fatura zaten işlenmiş: KA No: {ka_no}")
+            else:
+                print(f"⚠️ KA No bulunamadı, fatura atlanıyor")
         
         if not unprocessed_invoices:
             print(f"\n✅ İşlenecek yeni fatura bulunamadı. Toplam işlenmiş fatura: {len(processed_invoices)}")
@@ -1198,7 +1222,13 @@ def main():
     try:
         print("\n🔄 Fatura işleme servisi başlatıldı")
         
-        
+        # Başlangıçta IP bilgilerini göster
+        ip_info = get_my_ip()
+        if ip_info:
+            print(f"\n📡 Sistem IP Bilgileri:")
+            print(f"   🌐 Dış IP: {ip_info['external_ip']}")
+            print(f"   🏠 Yerel IP: {ip_info['local_ip']}")
+            print(f"   💻 Hostname: {ip_info['hostname']}")
         
         send_telegram_notification("<b>🚀 Fatura İşleme Servisi Başlatıldı</b>")
         
