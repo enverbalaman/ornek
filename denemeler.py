@@ -578,11 +578,11 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                 # Adres bilgilerini güncelle
                 postal_address = party.find('.//cac:PostalAddress', namespaces)
                 if postal_address is not None:
-                    # Sokak/Cadde adresi
-                    street_name = postal_address.find('./cbc:StreetName', namespaces)
-                    if street_name is not None:
-                        street_name.text = tam_adres if tam_adres else formatted_invoice_data['Adres']
-                        print(f"✅ Adres güncellendi: {street_name.text}")
+                    # Adres için BuildingName kullan
+                    building_name = postal_address.find('./cbc:BuildingName', namespaces)
+                    if building_name is not None:
+                        building_name.text = tam_adres if tam_adres else formatted_invoice_data['Adres']
+                        print(f"✅ Adres güncellendi: {building_name.text}")
 
                     # İl
                     city_name = postal_address.find('./cbc:CityName', namespaces)
@@ -771,21 +771,37 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                     note_elements[1].text = f"KA: {formatted_invoice_data['KANo']}"
                     print(f"✅ KA numarası güncellendi: {note_elements[1].text}")
                 
-                # Üçüncü Note elementini KiraTipi için kullan
-                if len(note_elements) >= 3 and formatted_invoice_data['KiraTipi']:
-                    note_elements[2].text = f"Kira Tipi: {formatted_invoice_data['KiraTipi']}"
-                    print(f"✅ KiraTipi (Note elementinde) güncellendi: {note_elements[2].text}")
-                elif formatted_invoice_data['KiraTipi']:
-                    # Yeni bir Note elementi ekle
-                    invoice_lines = root.findall(".//cac:InvoiceLine", namespaces)
-                    if invoice_lines:
-                        invoice_line = invoice_lines[0]
-                        # Yeni Note elementi oluştur
-                        new_note = ET.SubElement(invoice_line, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
-                        new_note.text = f"Kira Tipi: {formatted_invoice_data['KiraTipi']}"
-                        print(f"✅ KiraTipi için yeni Note elementi eklendi: {new_note.text}")
-                    else:
-                        print("❌ KiraTipi için InvoiceLine elementi bulunamadı")
+                # Üçüncü Note elementini Kullanıcı Adı için kullan
+                if len(note_elements) >= 3:
+                    aciklama = formatted_invoice_data.get('Aciklama', '')
+                    kullanici_adi = ''
+                    if 'Kullanıcı Adı:' in aciklama:
+                        kullanici_adi = aciklama.split('Kullanıcı Adı:')[1].split('Rez')[0].strip()
+                    note_elements[2].text = f"KULLANICI: {kullanici_adi}"
+                    print(f"✅ Kullanıcı adı güncellendi: {note_elements[2].text}")
+                
+                # Dördüncü Note elementini Rezervasyon numarası için kullan
+                if len(note_elements) >= 4:
+                    aciklama = formatted_invoice_data.get('Aciklama', '')
+                    rez_no = ''
+                    if 'CNF:' in aciklama:
+                        rez_no = aciklama.split('CNF:')[1].strip()
+                    note_elements[3].text = f"REZ: {rez_no}"
+                    print(f"✅ Rezervasyon numarası güncellendi: {note_elements[3].text}")
+                
+                # Beşinci Note elementini Kullanım tarihleri için kullan
+                if len(note_elements) >= 5:
+                    checkout = formatted_invoice_data.get('CHECKOUT_DATE', '')
+                    checkin = formatted_invoice_data.get('CHECKIN_DATE', '')
+                    
+                    # Tarihleri formatlama
+                    try:
+                        checkout_date = datetime.fromisoformat(checkout.replace('Z', '+00:00')).strftime('%d/%m/%Y')
+                        checkin_date = datetime.fromisoformat(checkin.replace('Z', '+00:00')).strftime('%d/%m/%Y')
+                        note_elements[4].text = f"KULLANIM TARİHİ : {checkout_date}-{checkin_date}"
+                    except (ValueError, AttributeError):
+                        note_elements[4].text = "KULLANIM TARİHİ : Belirtilmemiş"
+                    print(f"✅ Kullanım tarihleri güncellendi: {note_elements[4].text}")
 
         # Güncellenmiş XML'i kaydet
         updated_xml_path = 'updated_invoice.xml'
@@ -1093,8 +1109,8 @@ Bilinmeyen hata
 
 # Sayıyı yazıya çeviren fonksiyon
 def sayi_to_yazi(sayi):
-    birler = ["", "BİR", "İKİ", "ÜÇ", "DÖRT", "BEŞ", "ALTI", "YEDİ", "SEKİZ", "DOKUZ"]
-    onlar = ["", "ON", "YİRMİ", "OTUZ", "KIRK", "ELLİ", "ALTMIŞ", "YETMİŞ", "SEKSEN", "DOKSAN"]
+    birler = ["", "Bir", "İki", "Üç", "Dört", "Beş", "Altı", "Yedi", "Sekiz", "Dokuz"]
+    onlar = ["", "On", "Yirmi", "Otuz", "Kırk", "Elli", "Altmış", "Yetmiş", "Seksen", "Doksan"]
     
     def yuzler_to_yazi(n):
         if n == 0:
@@ -1105,20 +1121,20 @@ def sayi_to_yazi(sayi):
             return onlar[n // 10] + " " + birler[n % 10]
         else:
             if n // 100 == 1:
-                return "YÜZ " + yuzler_to_yazi(n % 100)
+                return "Yüz " + yuzler_to_yazi(n % 100)
             else:
-                return birler[n // 100] + " YÜZ " + yuzler_to_yazi(n % 100)
+                return birler[n // 100] + " Yüz " + yuzler_to_yazi(n % 100)
     
     def binler_to_yazi(n):
         if n < 1000:
             return yuzler_to_yazi(n)
         elif n < 1000000:
             if n // 1000 == 1:
-                return "BİN " + yuzler_to_yazi(n % 1000)
+                return "Bin " + yuzler_to_yazi(n % 1000)
             else:
-                return yuzler_to_yazi(n // 1000) + " BİN " + yuzler_to_yazi(n % 1000)
+                return yuzler_to_yazi(n // 1000) + " Bin " + yuzler_to_yazi(n % 1000)
         else:
-            return yuzler_to_yazi(n // 1000000) + " MİLYON " + binler_to_yazi(n % 1000000)
+            return yuzler_to_yazi(n // 1000000) + " Milyon " + binler_to_yazi(n % 1000000)
     
     # Sayıyı tam ve kuruş olarak ayır
     tam_kisim = int(sayi)
@@ -1132,13 +1148,13 @@ def sayi_to_yazi(sayi):
     
     # Sonucu birleştir
     if tam_kisim > 0 and kurus_kisim > 0:
-        return f"{tam_yazi} TÜRK LİRASI {kurus_yazi} KURUŞ"
+        return f"{tam_yazi} Türk Lirası {kurus_yazi} Kuruş"
     elif tam_kisim > 0:
-        return f"{tam_yazi} TÜRK LİRASI"
+        return f"{tam_yazi} Türk Lirası"
     elif kurus_kisim > 0:
-        return f"{kurus_yazi} KURUŞ"
+        return f"{kurus_yazi} Kuruş"
     else:
-        return "SIFIR TÜRK LİRASI"
+        return "Sıfır Türk Lirası"
 
 # İşlenmiş faturaları yükle
 def load_processed_invoices():
