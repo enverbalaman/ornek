@@ -218,7 +218,10 @@ def get_invoice_data():
                 'KDVTutari': invoice.get('VatAmount', 0),
                 'KDVsizTutar': invoice.get('NetAmount', 0),
                 'KDVliToplamTutar': invoice.get('GrossAmount', 0),
-                'IslemSaati': islem_saati
+                'KiraGunu': invoice.get('RentalDays', '1'),  # Kira günü alanı eklendi
+                'KiraTipi': invoice.get('RentalType', ''),   # Kira tipi alanı eklendi
+                'PlakaNo': invoice.get('PlateNumber', ''),   # Plaka no alanı eklendi
+                'IslemSaati': invoice.get('IslemSaati', '')
             }
             
             formatted_invoices.append(formatted_invoice)
