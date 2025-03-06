@@ -28,7 +28,7 @@ def get_otokoc_token():
     try:
         print("\n🔑 Otokoc API'den token alınıyor...")
         
-        # API isteği için URL ve parametreler
+        # IP bilgilerini al ve göster
         url = "https://merkezwebapi.otokoc.com.tr/STDealer/GetToken"
         payload = {
             "Username": "UrartuTrz",
@@ -182,67 +182,14 @@ def get_invoice_data():
             print(json.dumps(invoice, indent=2, ensure_ascii=False))
             print(f"{'='*50}")
         
-        # Verileri kiralamaVeri.json formatına dönüştür
-        formatted_invoices = []
-        for invoice in filtered_invoices:
-            # InvoiceNo veya KANo alanını kontrol et
-            ka_no = invoice.get('InvoiceNo', '')
-            if not ka_no:
-                ka_no = invoice.get('KANo', '')
-                if not ka_no:
-                    # Benzersiz bir ID oluştur
-                    ka_no = f"AUTO-{str(uuid.uuid4())[:8]}"
-                    print(f"⚠️ Fatura numarası bulunamadı, otomatik ID oluşturuldu: {ka_no}")
-            
-            # VKN alanını kontrol et - VergiNumarasi olarak geliyor
-            vkn = invoice.get('VergiNumarasi', '')
-            if not vkn:
-                # Alternatif alanları kontrol et
-                vkn = invoice.get('TaxNo', '')
-                if not vkn:
-                    vkn = invoice.get('VKN', '')
-                    if not vkn:
-                        vkn = invoice.get('TCKN', '')
-                        if not vkn:
-                            # Diğer olası alanları kontrol et
-                            for key in invoice.keys():
-                                if 'tax' in key.lower() or 'vkn' in key.lower() or 'vergi' in key.lower() or 'tckn' in key.lower():
-                                    vkn = invoice[key]
-                                    print(f"⚠️ VKN alternatif alandan alındı: {key}")
-                                    break
-            
-            # VKN yoksa uyarı ver
-            if not vkn:
-                print(f"⚠️ KA No: {ka_no} için VKN bulunamadı")
-            
-            formatted_invoice = {
-                'KANo': ka_no,
-                'VergiNumarasi': vkn,
-                'TumMusteriAdi': invoice.get('CustomerName', ''),
-                'VergiDairesi': invoice.get('TaxOffice', ''),
-                'Adres': invoice.get('Address', ''),
-                'Il': invoice.get('City', ''),
-                'Ilce': invoice.get('District', ''),
-                'KDVOrani': invoice.get('VatRate', 0),
-                'KDVTutari': invoice.get('VatAmount', 0),
-                'KDVsizTutar': invoice.get('NetAmount', 0),
-                'KDVliToplamTutar': invoice.get('GrossAmount', 0),
-                'KiraGunu': invoice.get('RentalDays', '1'),  # Kira günü alanı eklendi
-                'KiraTipi': invoice.get('RentalType', ''),   # Kira tipi alanı eklendi
-                'PlakaNo': invoice.get('PlateNumber', ''),   # Plaka no alanı eklendi
-                'IslemSaati': islem_saati
-            }
-            
-            formatted_invoices.append(formatted_invoice)
-        
         # İşlenmiş faturaları yükle
         processed_data = load_processed_invoices()
         processed_invoices = processed_data["processed_invoices"]
         
         # İşlenmemiş faturaları filtrele
-        unprocessed_invoices = [invoice for invoice in formatted_invoices if invoice.get('KANo') and invoice.get('KANo') not in processed_invoices]
+        unprocessed_invoices = [invoice for invoice in filtered_invoices if invoice.get('InvoiceNo') and invoice.get('InvoiceNo') not in processed_invoices]
         
-        print(f"🔍 İşlenmemiş fatura sayısı: {len(unprocessed_invoices)}/{len(formatted_invoices)}")
+        print(f"🔍 İşlenmemiş fatura sayısı: {len(unprocessed_invoices)}/{len(filtered_invoices)}")
         
         return unprocessed_invoices
         
@@ -1328,12 +1275,6 @@ def main():
         print("\n🔄 Fatura işleme servisi başlatıldı")
         send_telegram_notification("<b>🚀 Fatura İşleme Servisi Başlatıldı</b>")
         
-        # İlk token'ı al
-        if not get_otokoc_token():
-            print("❌ Otokoc API token alınamadı, servis başlatılamıyor")
-            send_telegram_notification("<b>❌ Otokoc API token alınamadı, servis başlatılamıyor</b>")
-            return
-        
         # İlk çalıştırmada tüm faturaları işle
         process_new_invoices()
         
@@ -1342,9 +1283,6 @@ def main():
             print(f"\n⏳ Bir sonraki kontrol için bekleniyor... ({datetime.now().strftime('%H:%M:%S')})")
             time.sleep(60)  # 60 saniye bekle
             print(f"\n🔍 Yeni faturalar kontrol ediliyor... ({datetime.now().strftime('%H:%M:%S')})")
-            
-            # Token kontrolü
-            check_and_refresh_token()
             
             # Yeni faturaları işle
             process_new_invoices()
@@ -1442,3 +1380,8 @@ def check_updated_xml(xml_path, invoice_data, namespaces):
 
 if __name__ == "__main__":
     main()
+
+
+
+
+    # bu dosyada avisten veri almıyor ama geri kalan herşey doğru.
