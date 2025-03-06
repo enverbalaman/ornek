@@ -631,12 +631,33 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
         # Base64 kodlaması
         base64_xml = base64.b64encode(updated_xml.encode('utf-8')).decode('utf-8')
         
+        # SONHALI.py'den alınan doğru LoadInvoice çağrısı
         # Faturayı yükle
+        request_header = {
+            'SESSION_ID': session_id
+        }
+        
+        invoice_data = {
+            'CONTENT': base64_xml,
+            'COMPRESSED': False
+        }
+        
+        sender_data = {
+            'vkn': '6290272882',  # Gönderici VKN
+            'alias': 'urn:mail:defaultpk@edmbilisim.com.tr'  # Gönderici alias
+        }
+        
+        receiver_data = {
+            'vkn': vkn,
+            'alias': alias
+        }
+        
         load_params = {
-            'sessionId': session_id,
-            'xmlContent': base64_xml,
-            'sourceUrn': alias,
-            'compressed': False
+            'REQUEST_HEADER': request_header,
+            'INVOICE': [invoice_data],
+            'SENDER': sender_data,
+            'RECEIVER': receiver_data,
+            'GENERATEINVOICEIDONLOAD': True
         }
         
         try:
@@ -970,6 +991,8 @@ EDM sistemine bağlanılamadı.
 def main():
     try:
         print("\n🔄 Fatura işleme servisi başlatıldı")
+        
+       
         
         send_telegram_notification("<b>🚀 Fatura İşleme Servisi Başlatıldı</b>")
         
