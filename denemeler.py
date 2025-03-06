@@ -173,6 +173,15 @@ def get_invoice_data():
         
         print(f"🔍 Filtreleme sonucu: {len(filtered_invoices)}/{len(invoices)} fatura işlenecek")
         
+        # Ham veriyi logla
+        print("\n📋 İşlenecek Faturaların Ham Verileri:")
+        for idx, invoice in enumerate(filtered_invoices, 1):
+            print(f"\n{'='*50}")
+            print(f"Fatura {idx}/{len(filtered_invoices)}")
+            print(f"{'='*50}")
+            print(json.dumps(invoice, indent=2, ensure_ascii=False))
+            print(f"{'='*50}")
+        
         # Verileri kiralamaVeri.json formatına dönüştür
         formatted_invoices = []
         for invoice in filtered_invoices:
