@@ -14,6 +14,8 @@ import zeep.exceptions
 import random
 import requests
 import glob
+from xml.etree.ElementTree import tostring
+
 
 # İşlenmiş faturaları takip etmek için JSON dosyası
 PROCESSED_INVOICES_FILE = 'processed_invoices.json'
@@ -130,7 +132,7 @@ def get_invoice_data(license_no=1):
             "Token": token,
             "LicenseNo": license_no,  # 1 for Avis, 2 for Budget
             "InvoiceDate": "",
-            "StartDate": yesterday,
+            "StartDate": today,
             "EndDate": today
         }
         
@@ -288,10 +290,10 @@ def edm_login():
             "SESSION_ID": str(uuid.uuid4()),
             "CLIENT_TXN_ID": str(uuid.uuid4()),
             "ACTION_DATE": action_date,
-            "REASON": "E-fatura/E-Arşiv gönder-al-CANLI",
+            "REASON": "E-fatura/E-Arşiv gönder-al testleri için",
             "APPLICATION_NAME": "EDM MINI CONNECTOR v1.0",
-            "HOSTNAME": "EDM MINI CONNECTOR v1.0",
-            "CHANNEL_NAME": "PROD",
+            "HOSTNAME": "MDORA17",
+            "CHANNEL_NAME": "TEST",
             "COMPRESSED": "N"
         }
 
@@ -353,10 +355,10 @@ def check_user_and_get_info(client, session_id, vkn):
         "SESSION_ID": session_id,
         "CLIENT_TXN_ID": str(uuid.uuid4()),
         "ACTION_DATE": action_date,
-        "REASON": "E-fatura/E-Arşiv gönder-al-CANLI",
+        "REASON": "E-fatura/E-Arşiv gönder-al testleri için",
         "APPLICATION_NAME": "EDM MINI CONNECTOR v1.0",
-        "HOSTNAME": "EDM MINI CONNECTOR v1.0",
-        "CHANNEL_NAME": "PROD",
+        "HOSTNAME": "MDORA17",
+        "CHANNEL_NAME": "TEST",
         "COMPRESSED": "N"
     }
 
@@ -433,7 +435,7 @@ def check_user_and_get_info(client, session_id, vkn):
             print("⚠️ E-Arşiv faturası olarak işleme devam edilecek")
             return None, None, None, None, None, None
             
-        # TURMOB bilgilerini al - Yeniden deneme mekanizması ile
+         # TURMOB bilgilerini al - Yeniden deneme mekanizması ile
         max_turmob_attempts = 2  # Maksimum 2 deneme
         turmob_retry_delay = 3  # 3 saniye bekleme süresi
         turmob_success = False  # TURMOB sorgusu başarı durumu
@@ -512,23 +514,38 @@ def check_user_and_get_info(client, session_id, vkn):
                 print("-" * 50)
                 
                 # TURMOB verilerini çıkart
-                vergi_dairesi = turmob_data.get('VERGIDAIRESI', '')
-                unvan = turmob_data.get('UNVAN', '')
-                tam_adres = turmob_data.get('TAMADRES', '')
-                il = turmob_data.get('IL', '')
-                ilce = turmob_data.get('ILCE', '')
+                vergi_dairesi = turmob_data.get('vergiDairesiAdi', '')
+                unvan = turmob_data.get('unvan', '')
                 
-                # Zorunlu alanların kontrolü
-                if not all([vergi_dairesi, unvan]):
-                    print("\n⚠️ TURMOB verisinde zorunlu alanlar eksik")
-                    if attempt < max_turmob_attempts - 1:
-                        print(f"⏳ {turmob_retry_delay} saniye bekleyip tekrar deneniyor...")
-                        time.sleep(turmob_retry_delay)
-                        continue
-                    else:
-                        print("❌ Maksimum deneme sayısına ulaşıldı. TURMOB verisi eksik.")
-                        print("⚠️ Bu kayıt atlanıyor ve sonraki kayda geçiliyor.")
-                        return False  # İşlemi sonlandır ve sonraki kayda geç
+                # Adres bilgilerini birleştir
+                adres_bilgileri = turmob_data.get('adresBilgileri', {}).get('AdresBilgileri', [])
+                if adres_bilgileri:
+                    adres = adres_bilgileri[0]
+                    adres_parcalari = []
+                    
+                    # Mahalle/Semt
+                    if adres.get('mahalleSemt'):
+                        adres_parcalari.append(adres['mahalleSemt'])
+                    
+                    # Cadde/Sokak
+                    if adres.get('caddeSokak'):
+                        adres_parcalari.append(adres['caddeSokak'])
+                    
+                    # Dış Kapı No
+                    if adres.get('disKapiNo'):
+                        adres_parcalari.append(f"No: {adres['disKapiNo']}")
+                    
+                    # İç Kapı No
+                    if adres.get('icKapiNo'):
+                        adres_parcalari.append(f"Daire: {adres['icKapiNo']}")
+                    
+                    tam_adres = ' '.join(adres_parcalari)
+                    il = adres.get('ilAdi', '')
+                    ilce = adres.get('ilceAdi', '')
+                else:
+                    tam_adres = ''
+                    il = ''
+                    ilce = ''
                 
                 print("\n✅ TURMOB bilgileri başarıyla alındı")
                 print(f"Vergi Dairesi: {vergi_dairesi}")
@@ -550,6 +567,28 @@ def check_user_and_get_info(client, session_id, vkn):
                     "attempt": attempt + 1,
                     "traceback": traceback.format_exc()
                 }
+                
+                # SOAP yanıtından hata detayını al
+                try:
+                    if hasattr(e, 'detail') and e.detail is not None:
+                        # XML elementini string'e çevir
+                        soap_detail = tostring(e.detail, encoding='unicode')
+                        error_details["soap_detail"] = soap_detail
+                        print(f"\n🔍 SOAP Hata Detayı:")
+                        print(soap_detail)
+                        
+                        # Detaylı hata mesajını bul
+                        for elem in e.detail.iter():
+                            if 'faultstring' in elem.tag.lower():
+                                error_details["fault_string"] = elem.text
+                                print(f"Hata Mesajı: {elem.text}")
+                            elif 'faultcode' in elem.tag.lower():
+                                error_details["fault_code"] = elem.text
+                                print(f"Hata Kodu: {elem.text}")
+                except Exception as detail_error:
+                    error_details["detail_error"] = str(detail_error)
+                    print(f"⚠️ SOAP detayı işlenirken hata: {str(detail_error)}")
+                
                 save_error_log("TURMOB_SOAP_ERROR", f"SOAP Fault: {str(e)}", error_details)
                 print(f"❌ TURMOB SOAP hatası: {str(e)}")
                 
@@ -1108,10 +1147,10 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
             "SESSION_ID": session_id,
             "CLIENT_TXN_ID": str(uuid.uuid4()),
             "ACTION_DATE": get_local_time().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+03:00",
-            "REASON": "E-fatura/E-Arşiv gönder-al-CANLI",
+            "REASON": "E-fatura/E-Arşiv gönder-al testleri için",
             "APPLICATION_NAME": "EDM MINI CONNECTOR v1.0",
-            "HOSTNAME": "EDM MINI CONNECTOR v1.0",
-            "CHANNEL_NAME": "PROD",
+            "HOSTNAME": "MDORA17",
+            "CHANNEL_NAME": "TEST",
             "COMPRESSED": "N"
         }
 
