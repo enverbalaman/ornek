@@ -909,83 +909,81 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
             # Note elementlerini güncelle
             note_elements = root.findall(".//cbc:Note", namespaces)
             
-            # Parent elementi bul
-            if note_elements:
-                parent = None
-                for elem in root.iter():
-                    for child in list(elem):
-                        if child in note_elements:
-                            parent = elem
-                            break
-                    if parent:
-                        break
+            # Önce tüm Note elementlerini kaldır
+            for note in note_elements:
+                parent = note.getparent()
+                if parent is not None:
+                    parent.remove(note)
+            
+            # InvoiceLine elementini bul
+            invoice_line = root.find(".//cac:InvoiceLine", namespaces)
+            if invoice_line is not None and invoice_line.getparent() is not None:
+                # Note elementlerini InvoiceLine'dan önce ekle
+                parent = invoice_line.getparent()
+                insert_index = list(parent).index(invoice_line)
                 
-                # Tüm note elementlerini temizle
-                if parent:
-                    for note in note_elements:
-                        parent.remove(note)
-                    
-                    # Note elementlerini sırayla ekle
-                    # 1. Note: Tutar yazı ile
-                    note1 = ET.SubElement(parent, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
-                    note1.text = f"Yazı ile: # {tutar_yazi} #"
-                    print(f"✅ Note 1 eklendi: {note1.text}")
-                    
-                    # 2. Note: KA numarası
-                    note2 = ET.SubElement(parent, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
-                    note2.text = f"KA: {formatted_invoice_data['KANo']}"
-                    print(f"✅ Note 2 eklendi: {note2.text}")
-                    
-                    # 3. Note: Kullanıcı adı
-                    note3 = ET.SubElement(parent, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
-                    aciklama = formatted_invoice_data.get('Aciklama', '')
-                    kullanici_adi = ''
-                    if aciklama:
-                        # Kullanıcı adını bul
-                        if 'Kullanıcı Adı:' in aciklama:
-                            kullanici_adi = aciklama.split('Kullanıcı Adı:')[1].split('Rez')[0].strip()
-                        elif 'Kullanıcı:' in aciklama:
-                            kullanici_adi = aciklama.split('Kullanıcı:')[1].split('Rez')[0].strip()
-                    note3.text = f"KULLANICI: {kullanici_adi if kullanici_adi else 'Belirtilmemiş'}"
-                    print(f"✅ Note 3 eklendi: {note3.text}")
-                    
-                    # 4. Note: Rezervasyon numarası
-                    note4 = ET.SubElement(parent, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
-                    rez_no = ''
-                    if aciklama:
-                        # Rezervasyon numarasını bul
-                        if 'CNF:' in aciklama:
-                            rez_no = aciklama.split('CNF:')[1].strip()
-                        elif 'Rez:' in aciklama:
-                            rez_no = aciklama.split('Rez:')[1].strip()
-                    note4.text = f"REZ: {rez_no if rez_no else 'Belirtilmemiş'}"
-                    print(f"✅ Note 4 eklendi: {note4.text}")
-                    
-                    # 5. Note: Kullanım tarihleri
-                    note5 = ET.SubElement(parent, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
-                    checkout = formatted_invoice_data.get('CHECKOUT_DATE', '')
-                    checkin = formatted_invoice_data.get('CHECKIN_DATE', '')
-                    try:
-                        if checkout and checkin:
-                            checkout_date = datetime.fromisoformat(checkout.replace('Z', '+00:00')).strftime('%d/%m/%Y')
-                            checkin_date = datetime.fromisoformat(checkin.replace('Z', '+00:00')).strftime('%d/%m/%Y')
-                            note5.text = f"KULLANIM TARİHİ: {checkout_date}-{checkin_date}"
-                        else:
-                            # Açıklamadan tarihleri bulmaya çalış
-                            if 'Tarih:' in aciklama:
-                                tarih_kismi = aciklama.split('Tarih:')[1].split()[0]
-                                if '-' in tarih_kismi:
-                                    note5.text = f"KULLANIM TARİHİ: {tarih_kismi}"
-                                else:
-                                    note5.text = "KULLANIM TARİHİ: Belirtilmemiş"
+                # Note 1: Tutar yazı ile
+                note1 = ET.Element('{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
+                note1.text = f"Yazı ile: # {tutar_yazi} #"
+                parent.insert(insert_index, note1)
+                print(f"✅ Note 1 eklendi: {note1.text}")
+                
+                # Note 2: KA numarası
+                note2 = ET.Element('{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
+                note2.text = f"KA: {formatted_invoice_data['KANo']}"
+                parent.insert(insert_index + 1, note2)
+                print(f"✅ Note 2 eklendi: {note2.text}")
+                
+                # Note 3: Kullanıcı adı
+                note3 = ET.Element('{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
+                aciklama = formatted_invoice_data.get('Aciklama', '')
+                kullanici_adi = ''
+                if aciklama:
+                    if 'Kullanıcı Adı:' in aciklama:
+                        kullanici_adi = aciklama.split('Kullanıcı Adı:')[1].split('Rez')[0].strip()
+                    elif 'Kullanıcı:' in aciklama:
+                        kullanici_adi = aciklama.split('Kullanıcı:')[1].split('Rez')[0].strip()
+                note3.text = f"KULLANICI: {kullanici_adi if kullanici_adi else 'Belirtilmemiş'}"
+                parent.insert(insert_index + 2, note3)
+                print(f"✅ Note 3 eklendi: {note3.text}")
+                
+                # Note 4: Rezervasyon numarası
+                note4 = ET.Element('{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
+                rez_no = ''
+                if aciklama:
+                    if 'CNF:' in aciklama:
+                        rez_no = aciklama.split('CNF:')[1].strip()
+                    elif 'Rez:' in aciklama:
+                        rez_no = aciklama.split('Rez:')[1].strip()
+                note4.text = f"REZ: {rez_no if rez_no else 'Belirtilmemiş'}"
+                parent.insert(insert_index + 3, note4)
+                print(f"✅ Note 4 eklendi: {note4.text}")
+                
+                # Note 5: Kullanım tarihleri
+                note5 = ET.Element('{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
+                checkout = formatted_invoice_data.get('CHECKOUT_DATE', '')
+                checkin = formatted_invoice_data.get('CHECKIN_DATE', '')
+                try:
+                    if checkout and checkin:
+                        checkout_date = datetime.fromisoformat(checkout.replace('Z', '+00:00')).strftime('%d/%m/%Y')
+                        checkin_date = datetime.fromisoformat(checkin.replace('Z', '+00:00')).strftime('%d/%m/%Y')
+                        note5.text = f"KULLANIM TARİHİ: {checkout_date}-{checkin_date}"
+                    else:
+                        if 'Tarih:' in aciklama:
+                            tarih_kismi = aciklama.split('Tarih:')[1].split()[0]
+                            if '-' in tarih_kismi:
+                                note5.text = f"KULLANIM TARİHİ: {tarih_kismi}"
                             else:
                                 note5.text = "KULLANIM TARİHİ: Belirtilmemiş"
-                    except (ValueError, AttributeError) as e:
-                        print(f"⚠️ Tarih dönüştürme hatası: {e}")
-                        note5.text = "KULLANIM TARİHİ: Belirtilmemiş"
-                    print(f"✅ Note 5 eklendi: {note5.text}")
+                        else:
+                            note5.text = "KULLANIM TARİHİ: Belirtilmemiş"
+                except (ValueError, AttributeError) as e:
+                    print(f"⚠️ Tarih dönüştürme hatası: {e}")
+                    note5.text = "KULLANIM TARİHİ: Belirtilmemiş"
+                parent.insert(insert_index + 4, note5)
+                print(f"✅ Note 5 eklendi: {note5.text}")
             else:
-                print("⚠️ Note elementleri bulunamadı")
+                print("❌ InvoiceLine elementi bulunamadı")
 
         # Güncellenmiş XML'i kaydet
         updated_xml_path = 'updated_invoice.xml'
