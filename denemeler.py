@@ -447,7 +447,10 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                 'Ilce': ilce or kayit.get('Ilce', ''),
                 'VergiDairesi': vergi_dairesi or kayit.get('VergiDairesi', ''),
                 'KiraTipi': kayit.get('KiraTipi', ''),
-                'PlakaNo': kayit.get('PlakaNo', '')
+                'PlakaNo': kayit.get('PlakaNo', ''),
+                'Aciklama': kayit.get('Aciklama', ''),
+                'CHECKOUT_DATE': kayit.get('CHECKOUT_DATE', ''),
+                'CHECKIN_DATE': kayit.get('CHECKIN_DATE', '')
             }
             
             # Boş değerleri kontrol et ve varsayılan değerlerle doldur
@@ -790,17 +793,25 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                     note3 = ET.SubElement(parent, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
                     aciklama = formatted_invoice_data.get('Aciklama', '')
                     kullanici_adi = ''
-                    if 'Kullanıcı Adı:' in aciklama:
-                        kullanici_adi = aciklama.split('Kullanıcı Adı:')[1].split('Rez')[0].strip()
-                    note3.text = f"KULLANICI: {kullanici_adi}"
+                    if aciklama:
+                        # Kullanıcı adını bul
+                        if 'Kullanıcı Adı:' in aciklama:
+                            kullanici_adi = aciklama.split('Kullanıcı Adı:')[1].split('Rez')[0].strip()
+                        elif 'Kullanıcı:' in aciklama:
+                            kullanici_adi = aciklama.split('Kullanıcı:')[1].split('Rez')[0].strip()
+                    note3.text = f"KULLANICI: {kullanici_adi if kullanici_adi else 'Belirtilmemiş'}"
                     print(f"✅ Note 3 eklendi: {note3.text}")
                     
                     # 4. Note: Rezervasyon numarası
                     note4 = ET.SubElement(parent, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
                     rez_no = ''
-                    if 'CNF:' in aciklama:
-                        rez_no = aciklama.split('CNF:')[1].strip()
-                    note4.text = f"REZ: {rez_no}"
+                    if aciklama:
+                        # Rezervasyon numarasını bul
+                        if 'CNF:' in aciklama:
+                            rez_no = aciklama.split('CNF:')[1].strip()
+                        elif 'Rez:' in aciklama:
+                            rez_no = aciklama.split('Rez:')[1].strip()
+                    note4.text = f"REZ: {rez_no if rez_no else 'Belirtilmemiş'}"
                     print(f"✅ Note 4 eklendi: {note4.text}")
                     
                     # 5. Note: Kullanım tarihleri
@@ -808,11 +819,23 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                     checkout = formatted_invoice_data.get('CHECKOUT_DATE', '')
                     checkin = formatted_invoice_data.get('CHECKIN_DATE', '')
                     try:
-                        checkout_date = datetime.fromisoformat(checkout.replace('Z', '+00:00')).strftime('%d/%m/%Y')
-                        checkin_date = datetime.fromisoformat(checkin.replace('Z', '+00:00')).strftime('%d/%m/%Y')
-                        note5.text = f"KULLANIM TARİHİ : {checkout_date}-{checkin_date}"
-                    except (ValueError, AttributeError):
-                        note5.text = "KULLANIM TARİHİ : Belirtilmemiş"
+                        if checkout and checkin:
+                            checkout_date = datetime.fromisoformat(checkout.replace('Z', '+00:00')).strftime('%d/%m/%Y')
+                            checkin_date = datetime.fromisoformat(checkin.replace('Z', '+00:00')).strftime('%d/%m/%Y')
+                            note5.text = f"KULLANIM TARİHİ: {checkout_date}-{checkin_date}"
+                        else:
+                            # Açıklamadan tarihleri bulmaya çalış
+                            if 'Tarih:' in aciklama:
+                                tarih_kismi = aciklama.split('Tarih:')[1].split()[0]
+                                if '-' in tarih_kismi:
+                                    note5.text = f"KULLANIM TARİHİ: {tarih_kismi}"
+                                else:
+                                    note5.text = "KULLANIM TARİHİ: Belirtilmemiş"
+                            else:
+                                note5.text = "KULLANIM TARİHİ: Belirtilmemiş"
+                    except (ValueError, AttributeError) as e:
+                        print(f"⚠️ Tarih dönüştürme hatası: {e}")
+                        note5.text = "KULLANIM TARİHİ: Belirtilmemiş"
                     print(f"✅ Note 5 eklendi: {note5.text}")
             else:
                 print("⚠️ Note elementleri bulunamadı")
