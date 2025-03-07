@@ -130,7 +130,7 @@ def get_invoice_data(license_no=1):
             "Token": token,
             "LicenseNo": license_no,  # 1 for Avis, 2 for Budget
             "InvoiceDate": "",
-            "StartDate": yesterday,
+            "StartDate": today,
             "EndDate": today
         }
         
@@ -342,7 +342,7 @@ def edm_login():
         traceback.print_exc()
         return None, None
 
-def check_user_and_get_info(client, session_id, vkn, license_no=1):  # license_no parametresi kalacak ama kullanılmayacak
+def check_user_and_get_info(client, session_id, vkn):
     print("\n" + "="*50)
     print(f"🔍 CheckUser İşlemi Başlatıldı - VKN: {vkn}")
     print("="*50)
@@ -453,7 +453,7 @@ def check_user_and_get_info(client, session_id, vkn, license_no=1):  # license_n
             
             # TURMOB bilgilerini al
             turmob_response = client.service.GetTurmob(REQUEST_HEADER=turmob_header, VKN=vkn)
-
+            
             if not turmob_response:
                 error_details = {
                     "vkn": vkn,
@@ -1427,7 +1427,7 @@ EDM sistemine bağlanılamadı.
                 continue
 
             # Firma bilgilerini kontrol et
-            alias, vergi_dairesi, unvan, tam_adres, il, ilce = check_user_and_get_info(client, session_id, vkn, license_no)
+            alias, vergi_dairesi, unvan, tam_adres, il, ilce = check_user_and_get_info(client, session_id, vkn)
             
             # E-fatura mükellefi değilse veya bilgiler alınamadıysa API'den gelen bilgileri kullan
             if not alias:
