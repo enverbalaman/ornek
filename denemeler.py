@@ -665,7 +665,18 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
         if uuid_element is not None:
             uuid_element.text = new_uuid
             print(f"✅ UUID güncellendi: {new_uuid}")
+        else:
+            print("❌ UUID elementi bulunamadı!")
+            return False
         
+        # ID güncelle - KA numarasını kullan
+        if id_element is not None and formatted_invoice_data and 'KANo' in formatted_invoice_data:
+            id_element.text = formatted_invoice_data['KANo']
+            print(f"✅ ID güncellendi: {formatted_invoice_data['KANo']}")
+        else:
+            print("❌ ID elementi veya KA numarası bulunamadı!")
+            return False
+
         # ProfileID güncelleme - E-Arşiv kontrolü
         profile_id = root.find('.//cbc:ProfileID', namespaces)
         if profile_id is not None:
@@ -1553,10 +1564,10 @@ def main():
         
         # İlk çalıştırmada hem Avis hem Budget faturalarını işle
         process_new_invoices(1)  # Avis
-        time.sleep(60)  # 1 dakika bekle
+        time.sleep(30)  # 30 saniye bekle
         process_new_invoices(2)  # Budget
         
-        # Her 1 dakikada bir sırayla Avis ve Budget kontrolü yap
+        # Her 30 saniyede bir sırayla Avis ve Budget kontrolü yap
         while True:
             # Gece yarısı kontrolü ve eski logları temizle
             check_and_reset_at_midnight()
@@ -1564,7 +1575,7 @@ def main():
             
             local_now = get_local_time()
             print(f"\n⏳ Bir sonraki Avis kontrolü için bekleniyor... (Yerel Saat: {local_now.strftime('%H:%M:%S')})")
-            time.sleep(60)  # 60 saniye bekle
+            time.sleep(30)  # 30 saniye bekle
             
             # Gece yarısı kontrolü
             check_and_reset_at_midnight()
@@ -1578,7 +1589,7 @@ def main():
             
             local_now = get_local_time()
             print(f"\n⏳ Bir sonraki Budget kontrolü için bekleniyor... (Yerel Saat: {local_now.strftime('%H:%M:%S')})")
-            time.sleep(60)  # 60 saniye bekle
+            time.sleep(30)  # 30 saniye bekle
             
             # Gece yarısı kontrolü
             check_and_reset_at_midnight()
