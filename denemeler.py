@@ -452,8 +452,8 @@ def check_user_and_get_info(client, session_id, vkn, license_no=1):  # license_n
             print(f"Session ID: {session_id}")
             
             # TURMOB bilgilerini al
-            turmob_response = client.service.GetTurmobData(REQUEST_HEADER=turmob_header, VKN=vkn)
-            
+            turmob_response = client.service.GetTurmob(REQUEST_HEADER=turmob_header, VKN=vkn)
+
             if not turmob_response:
                 error_details = {
                     "vkn": vkn,
