@@ -440,24 +440,47 @@ def check_user_and_get_info(client, session_id, vkn):
         
         for attempt in range(max_turmob_attempts):
             print(f"\n🔄 TURMOB Bilgileri Alınıyor... (Deneme {attempt + 1}/{max_turmob_attempts})")
-            turmob_header = {
-                "SESSION_ID": session_id,
-                "CLIENT_TXN_ID": str(uuid.uuid4()),
-                "ACTION_DATE": get_local_time().strftime("%Y-%m-%d"),
-                "REASON": "E-fatura/E-Arşiv gönder-al-CANLI",
-                "APPLICATION_NAME": "EDM MINI CONNECTOR v1.0",
-                "HOSTNAME": "EDM MINI CONNECTOR v1.0",
-                "CHANNEL_NAME": "PROD",
-                "COMPRESSED": "N"
-            }
-
-         
-        
             
             try:
+                # TURMOB sorgusu için yeni login
+                print("\n🔑 TURMOB sorgusu için yeni login yapılıyor...")
+                action_date = get_local_time().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+03:00"
+                login_request_header = {
+                    "SESSION_ID": str(uuid.uuid4()),
+                    "CLIENT_TXN_ID": str(uuid.uuid4()),
+                    "ACTION_DATE": action_date,
+                    "REASON": "E-fatura/E-Arşiv gönder-al testleri için",
+                    "APPLICATION_NAME": "EDM MINI CONNECTOR v1.0",
+                    "HOSTNAME": "MDORA17",
+                    "CHANNEL_NAME": "TEST",
+                    "COMPRESSED": "N"
+                }
+
+                login_request = {
+                    "REQUEST_HEADER": login_request_header,
+                    "USER_NAME": "otomasyon",
+                    "PASSWORD": "123456789"
+                }
+
+                login_response = client.service.Login(**login_request)
+                turmob_session_id = login_response.SESSION_ID
+                print(f"✅ TURMOB için yeni login başarılı - Session ID: {turmob_session_id}")
+
+                # TURMOB sorgusu için header hazırla
+                turmob_header = {
+                    "SESSION_ID": turmob_session_id,  # Yeni session ID kullan
+                    "CLIENT_TXN_ID": str(uuid.uuid4()),
+                    "ACTION_DATE": datetime.now().strftime("%Y-%m-%d"),
+                    "REASON": "E-fatura/E-Arşiv gönder-al testleri için",
+                    "APPLICATION_NAME": "EDM MINI CONNECTOR v1.0",
+                    "HOSTNAME": "MDORA17",
+                    "CHANNEL_NAME": "TEST",
+                    "COMPRESSED": "N"
+                }
+                
                 print("\n📤 TURMOB İsteği Gönderiliyor...")
                 print(f"VKN: {vkn}")
-                print(f"Session ID: {session_id}")
+                print(f"Session ID: {turmob_session_id}")
                 
                 # TURMOB bilgilerini al
                 turmob_response = client.service.GetTurmob(REQUEST_HEADER=turmob_header, VKN=vkn)
@@ -483,6 +506,11 @@ def check_user_and_get_info(client, session_id, vkn):
                 # TURMOB yanıtını serialize et
                 turmob_data = serialize_object(turmob_response)
                 
+                print("\nTURMOB Response Details:")
+                print("-" * 50)
+                print(json.dumps(turmob_data, indent=2, ensure_ascii=False))
+                print("-" * 50)
+                
                 # TURMOB verilerini çıkart
                 vergi_dairesi = turmob_data.get('VERGIDAIRESI', '')
                 unvan = turmob_data.get('UNVAN', '')
@@ -503,6 +531,12 @@ def check_user_and_get_info(client, session_id, vkn):
                         return False  # İşlemi sonlandır ve sonraki kayda geç
                 
                 print("\n✅ TURMOB bilgileri başarıyla alındı")
+                print(f"Vergi Dairesi: {vergi_dairesi}")
+                print(f"Unvan: {unvan}")
+                print(f"Adres: {tam_adres}")
+                print(f"İl: {il}")
+                print(f"İlçe: {ilce}")
+                
                 turmob_success = True
                 return alias, vergi_dairesi, unvan, tam_adres, il, ilce
                 
@@ -510,7 +544,7 @@ def check_user_and_get_info(client, session_id, vkn):
                 error_details = {
                     "error_type": "SOAP_FAULT",
                     "vkn": vkn,
-                    "turmob_header": turmob_header,
+                    "turmob_header": turmob_header if 'turmob_header' in locals() else None,
                     "fault_code": getattr(e, 'code', 'Unknown'),
                     "fault_message": str(e),
                     "attempt": attempt + 1,
@@ -542,7 +576,7 @@ def check_user_and_get_info(client, session_id, vkn):
                 error_details = {
                     "error_type": "TRANSPORT_ERROR",
                     "vkn": vkn,
-                    "turmob_header": turmob_header,
+                    "turmob_header": turmob_header if 'turmob_header' in locals() else None,
                     "status_code": getattr(e, 'status_code', 'Unknown'),
                     "attempt": attempt + 1,
                     "traceback": traceback.format_exc()
@@ -563,7 +597,7 @@ def check_user_and_get_info(client, session_id, vkn):
                 error_details = {
                     "error_type": type(e).__name__,
                     "vkn": vkn,
-                    "turmob_header": turmob_header,
+                    "turmob_header": turmob_header if 'turmob_header' in locals() else None,
                     "attempt": attempt + 1,
                     "traceback": traceback.format_exc()
                 }
