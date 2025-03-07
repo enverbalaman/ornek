@@ -438,7 +438,7 @@ def check_user_and_get_info(client, session_id, vkn):
         turmob_header = {
             "SESSION_ID": session_id,
             "CLIENT_TXN_ID": str(uuid.uuid4()),
-            "ACTION_DATE": get_local_time().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+03:00",
+            "ACTION_DATE": get_local_time().strftime("%Y-%m-%d"),
             "REASON": "test",
             "APPLICATION_NAME": "EDMTEST",
             "HOSTNAME": "BALCIAS",
