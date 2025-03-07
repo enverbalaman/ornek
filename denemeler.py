@@ -288,10 +288,10 @@ def edm_login():
             "SESSION_ID": str(uuid.uuid4()),
             "CLIENT_TXN_ID": str(uuid.uuid4()),
             "ACTION_DATE": action_date,
-            "REASON": "E-fatura/E-Arşiv gönder-al testleri için",
+            "REASON": "E-fatura/E-Arşiv gönder-al-CANLI",
             "APPLICATION_NAME": "EDM MINI CONNECTOR v1.0",
-            "HOSTNAME": "MDORA17",
-            "CHANNEL_NAME": "TEST",
+            "HOSTNAME": "EDM MINI CONNECTOR v1.0",
+            "CHANNEL_NAME": "PROD",
             "COMPRESSED": "N"
         }
 
@@ -353,10 +353,10 @@ def check_user_and_get_info(client, session_id, vkn):
         "SESSION_ID": session_id,
         "CLIENT_TXN_ID": str(uuid.uuid4()),
         "ACTION_DATE": action_date,
-        "REASON": "E-fatura/E-Arşiv gönder-al testleri için",
+        "REASON": "E-fatura/E-Arşiv gönder-al-CANLI",
         "APPLICATION_NAME": "EDM MINI CONNECTOR v1.0",
-        "HOSTNAME": "MDORA17",
-        "CHANNEL_NAME": "TEST",
+        "HOSTNAME": "EDM MINI CONNECTOR v1.0",
+        "CHANNEL_NAME": "PROD",
         "COMPRESSED": "N"
     }
 
@@ -1071,10 +1071,10 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
             "SESSION_ID": session_id,
             "CLIENT_TXN_ID": str(uuid.uuid4()),
             "ACTION_DATE": get_local_time().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+03:00",
-            "REASON": "E-fatura/E-Arşiv gönder-al testleri için",
+            "REASON": "E-fatura/E-Arşiv gönder-al-CANLI",
             "APPLICATION_NAME": "EDM MINI CONNECTOR v1.0",
-            "HOSTNAME": "MDORA17",
-            "CHANNEL_NAME": "TEST",
+            "HOSTNAME": "EDM MINI CONNECTOR v1.0",
+            "CHANNEL_NAME": "PROD",
             "COMPRESSED": "N"
         }
 
