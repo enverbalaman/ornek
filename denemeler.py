@@ -130,7 +130,7 @@ def get_invoice_data(license_no=1):
             "Token": token,
             "LicenseNo": license_no,  # 1 for Avis, 2 for Budget
             "InvoiceDate": "",
-            "StartDate": today,
+            "StartDate": yesterday,
             "EndDate": today
         }
         
