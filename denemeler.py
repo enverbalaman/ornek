@@ -13,6 +13,7 @@ import time
 import zeep.exceptions
 import random
 import requests
+import glob
 
 # İşlenmiş faturaları takip etmek için JSON dosyası
 PROCESSED_INVOICES_FILE = 'processed_invoices.json'
@@ -23,6 +24,9 @@ token_expiry_time = None
 
 # Sunucu ve yerel saat farkı (saat cinsinden)
 SERVER_TIME_DIFFERENCE = 3
+
+# Log dosyaları için klasör
+LOG_DIRECTORY = 'error_logs'
 
 def get_local_time():
     """Sunucu saatinden yerel saati hesaplar (3 saat ileri)"""
@@ -46,6 +50,12 @@ def get_otokoc_token():
         response_data = response.json()
         
         if 'Data' not in response_data or 'Token' not in response_data['Data']:
+            error_details = {
+                "response_data": response_data,
+                "status_code": response.status_code,
+                "url": url
+            }
+            save_error_log("TOKEN_ERROR", "Geçersiz yanıt formatı: Token bulunamadı", error_details)
             print(f"❌ Otokoc API token alınamadı: Geçersiz yanıt formatı")
             print(f"Yanıt: {json.dumps(response_data, indent=2, ensure_ascii=False)}")
             return None
@@ -55,7 +65,23 @@ def get_otokoc_token():
         token_expiry_time = get_local_time() + timedelta(minutes=4)
         print(f"✅ Otokoc API'den token alındı. Geçerlilik: {token_expiry_time.strftime('%H:%M:%S')}")
         return otokoc_token
+    except requests.exceptions.RequestException as e:
+        error_details = {
+            "error_type": type(e).__name__,
+            "url": url,
+            "request_payload": payload,
+            "traceback": traceback.format_exc()
+        }
+        save_error_log("TOKEN_REQUEST_ERROR", str(e), error_details)
+        print(f"❌ Otokoc API token alma hatası: {str(e)}")
+        traceback.print_exc()
+        return None
     except Exception as e:
+        error_details = {
+            "error_type": type(e).__name__,
+            "traceback": traceback.format_exc()
+        }
+        save_error_log("TOKEN_UNEXPECTED_ERROR", str(e), error_details)
         print(f"❌ Otokoc API token alma hatası: {str(e)}")
         traceback.print_exc()
         return None
@@ -79,7 +105,12 @@ def get_invoice_data(license_no=1):
         # Token kontrolü ve yenileme
         token = check_and_refresh_token()
         if not token:
-            print("❌ Geçerli token olmadan fatura verileri çekilemez")
+            error_details = {
+                "license_no": license_no,
+                "company": "Avis" if license_no == 1 else "Budget"
+            }
+            save_error_log("INVOICE_DATA_TOKEN_ERROR", "Geçerli token olmadan fatura verileri çekilemez", error_details)
+            print("❌ Geçerli token olmadan fatura veriler çekilemez")
             return []
         
         company_name = "Avis" if license_no == 1 else "Budget"
@@ -108,6 +139,12 @@ def get_invoice_data(license_no=1):
         response_data = response.json()
         
         if response_data.get('MessageEN') == "Token is expired":
+            error_details = {
+                "company": company_name,
+                "license_no": license_no,
+                "response": response_data
+            }
+            save_error_log("INVOICE_DATA_EXPIRED_TOKEN", "Token süresi dolmuş", error_details)
             print("❌ Token süresi dolmuş, yenileniyor...")
             token = get_otokoc_token()
             if not token:
@@ -120,7 +157,16 @@ def get_invoice_data(license_no=1):
             response_data = response.json()
         
         if 'Data' not in response_data or 'Invoices' not in response_data['Data']:
-            print(f"❌ Otokoc API'den {company_name} fatura verileri çekilemedi: Geçersiz yanıt formatı")
+            error_details = {
+                "company": company_name,
+                "license_no": license_no,
+                "response_data": response_data,
+                "status_code": response.status_code,
+                "url": url,
+                "payload": payload
+            }
+            save_error_log("INVOICE_DATA_INVALID_RESPONSE", f"Geçersiz yanıt formatı: {json.dumps(response_data)}", error_details)
+            print(f"❌ Otokoc API {company_name} fatura verileri çekilemedi: Geçersiz yanıt formatı")
             print(f"Yanıt: {json.dumps(response_data, indent=2, ensure_ascii=False)}")
             return []
 
@@ -206,10 +252,26 @@ def get_invoice_data(license_no=1):
         return unprocessed_invoices
         
     except requests.exceptions.RequestException as e:
+        error_details = {
+            "company": company_name,
+            "license_no": license_no,
+            "url": url,
+            "payload": payload,
+            "error_type": type(e).__name__,
+            "traceback": traceback.format_exc()
+        }
+        save_error_log("INVOICE_DATA_REQUEST_ERROR", str(e), error_details)
         print(f"❌ Otokoc API {company_name} fatura verileri çekme hatası: {str(e)}")
         traceback.print_exc()
         return []
     except Exception as e:
+        error_details = {
+            "company": company_name,
+            "license_no": license_no,
+            "error_type": type(e).__name__,
+            "traceback": traceback.format_exc()
+        }
+        save_error_log("INVOICE_DATA_UNEXPECTED_ERROR", str(e), error_details)
         print(f"❌ Otokoc API {company_name} fatura verileri çekme hatası: {str(e)}")
         traceback.print_exc()
         return []
@@ -240,12 +302,42 @@ def edm_login():
         }
 
         print("\n🔑 EDM Login yapılıyor...")
-        login_response = client.service.Login(**login_request)
-        session_id = login_response.SESSION_ID
-        print(f"✅ EDM Login başarılı - Session ID: {session_id}")
-        return client, session_id
+        try:
+            login_response = client.service.Login(**login_request)
+            session_id = login_response.SESSION_ID
+            print(f"✅ EDM Login başarılı - Session ID: {session_id}")
+            return client, session_id
+        except zeep.exceptions.Fault as e:
+            error_details = {
+                "error_type": "SOAP_FAULT",
+                "wsdl_url": wsdl_url,
+                "request_header": login_request_header,
+                "fault_code": getattr(e, 'code', 'Unknown'),
+                "fault_message": str(e),
+                "traceback": traceback.format_exc()
+            }
+            save_error_log("EDM_LOGIN_SOAP_ERROR", f"SOAP Fault: {str(e)}", error_details)
+            print(f"❌ EDM Login SOAP hatası: {str(e)}")
+            return None, None
+        except zeep.exceptions.TransportError as e:
+            error_details = {
+                "error_type": "TRANSPORT_ERROR",
+                "wsdl_url": wsdl_url,
+                "request_header": login_request_header,
+                "status_code": getattr(e, 'status_code', 'Unknown'),
+                "traceback": traceback.format_exc()
+            }
+            save_error_log("EDM_LOGIN_TRANSPORT_ERROR", f"Transport Error: {str(e)}", error_details)
+            print(f"❌ EDM Login transport hatası: {str(e)}")
+            return None, None
 
     except Exception as e:
+        error_details = {
+            "error_type": type(e).__name__,
+            "wsdl_url": wsdl_url,
+            "traceback": traceback.format_exc()
+        }
+        save_error_log("EDM_LOGIN_UNEXPECTED_ERROR", str(e), error_details)
         print(f"❌ EDM Login hatası: {str(e)}")
         traceback.print_exc()
         return None, None
@@ -277,8 +369,32 @@ def check_user_and_get_info(client, session_id, vkn):
         print(f"Request Header: {json.dumps(request_header, indent=2)}")
         print(f"User Data: {json.dumps(user, indent=2)}")
         
-        response = client.service.CheckUser(REQUEST_HEADER=request_header, USER=user)
-        print("\n📥 CheckUser Yanıtı Alındı")
+        try:
+            response = client.service.CheckUser(REQUEST_HEADER=request_header, USER=user)
+            print("\n📥 CheckUser Yanıtı Alındı")
+        except zeep.exceptions.Fault as e:
+            error_details = {
+                "error_type": "SOAP_FAULT",
+                "vkn": vkn,
+                "request_header": request_header,
+                "fault_code": getattr(e, 'code', 'Unknown'),
+                "fault_message": str(e),
+                "traceback": traceback.format_exc()
+            }
+            save_error_log("CHECK_USER_SOAP_ERROR", f"SOAP Fault: {str(e)}", error_details)
+            print(f"❌ CheckUser SOAP hatası: {str(e)}")
+            return None, None, None, None, None, None
+        except zeep.exceptions.TransportError as e:
+            error_details = {
+                "error_type": "TRANSPORT_ERROR",
+                "vkn": vkn,
+                "request_header": request_header,
+                "status_code": getattr(e, 'status_code', 'Unknown'),
+                "traceback": traceback.format_exc()
+            }
+            save_error_log("CHECK_USER_TRANSPORT_ERROR", f"Transport Error: {str(e)}", error_details)
+            print(f"❌ CheckUser transport hatası: {str(e)}")
+            return None, None, None, None, None, None
         
         serialized_response = serialize_object(response)
         print("\nCheckUser Response Details:")
@@ -288,9 +404,14 @@ def check_user_and_get_info(client, session_id, vkn):
 
         # Response boş dizi kontrolü
         if not response or len(response) == 0:
+            error_details = {
+                "vkn": vkn,
+                "request_header": request_header,
+                "response": serialized_response
+            }
+            save_error_log("CHECK_USER_NOT_FOUND", f"VKN {vkn} e-fatura sisteminde bulunamadı", error_details)
             print("\n⚠️ Kullanıcı e-fatura sisteminde bulunamadı")
             print("⚠️ E-Arşiv faturası olarak işleme devam edilecek")
-            # E-Arşiv için null değerler döndür, alias null olduğunda E-Arşiv olarak işlenecek
             return None, None, None, None, None, None
         
         print("\n✅ Kullanıcı e-fatura sisteminde bulundu")
@@ -301,6 +422,13 @@ def check_user_and_get_info(client, session_id, vkn):
         print(f"📧 Alias: {alias}")
         
         if not alias:
+            error_details = {
+                "vkn": vkn,
+                "request_header": request_header,
+                "response": serialized_response,
+                "first_user": serialize_object(first_user)
+            }
+            save_error_log("CHECK_USER_NO_ALIAS", f"VKN {vkn} için alias bulunamadı", error_details)
             print("\n⚠️ Alias bulunamadı")
             print("⚠️ E-Arşiv faturası olarak işleme devam edilecek")
             return None, None, None, None, None, None
@@ -322,73 +450,74 @@ def check_user_and_get_info(client, session_id, vkn):
             print("\n📤 TURMOB İsteği Gönderiliyor...")
             print(f"VKN: {vkn}")
             print(f"Session ID: {session_id}")
-            print(f"TURMOB Request Header: {json.dumps(turmob_header, indent=2)}")
-            
-            try:
-                turmob_response = client.service.GetTurmob(REQUEST_HEADER=turmob_header, VKN=vkn)
-            except zeep.exceptions.Fault as soap_error:
-                print(f"\n❌ SOAP Hatası:")
-                print(f"Hata Mesajı: {soap_error.message}")
-                if hasattr(soap_error, 'detail'):
-                    detail_xml = ET.tostring(soap_error.detail, encoding='unicode')
-                    print(f"Hata Detayı XML: {detail_xml}")
-                print(f"Hata Kodu: {getattr(soap_error, 'code', 'Kod yok')}")
-                return alias, None, None, None, None, None
-            
-            print("\n📥 TURMOB Ham Yanıt:")
-            print("-" * 50)
-            print(turmob_response)
-            print("-" * 50)
-            
-            if hasattr(turmob_response, 'ERROR'):
-                print(f"\n❌ TURMOB Hatası: {turmob_response.ERROR}")
-                return alias, None, None, None, None, None
-            
-            serialized_turmob = serialize_object(turmob_response)
-            print("\n📥 TURMOB Serialize Edilmiş Yanıt:")
-            print("-" * 50)
-            print(json.dumps(serialized_turmob, indent=2, ensure_ascii=False))
-            print("-" * 50)
-            
-            # Yanıt kontrolü
-            if not serialized_turmob:
-                print("\n⚠️ TURMOB yanıtı boş")
-                return alias, None, None, None, None, None
             
             # TURMOB bilgilerini al
-            vergi_dairesi = serialized_turmob.get('vergiDairesiAdi', '')
-            unvan = serialized_turmob.get('kimlikUnvani', '')
+            turmob_response = client.service.GetTurmobData(REQUEST_HEADER=turmob_header, VKN=vkn)
             
-            # Adres bilgileri
-            adres_bilgileri = serialized_turmob.get('adresBilgileri', {}).get('AdresBilgileri', [{}])[0]
+            if not turmob_response:
+                error_details = {
+                    "vkn": vkn,
+                    "turmob_header": turmob_header
+                }
+                save_error_log("TURMOB_NO_DATA", f"VKN {vkn} için TURMOB verisi bulunamadı", error_details)
+                print("\n⚠️ TURMOB verisi bulunamadı")
+                return alias, None, None, None, None, None
             
-            # Adres bileşenlerini birleştir
-            adres_parcalari = [
-                adres_bilgileri.get('mahalleSemt', ''),
-                adres_bilgileri.get('caddeSokak', ''),
-                adres_bilgileri.get('disKapiNo', ''),
-                adres_bilgileri.get('icKapiNo', '')
-            ]
-            tam_adres = ' '.join(filter(None, adres_parcalari))
-            il = adres_bilgileri.get('ilAdi', '')
-            ilce = adres_bilgileri.get('ilceAdi', '')
+            # TURMOB yanıtını serialize et
+            turmob_data = serialize_object(turmob_response)
             
-            print("\n📋 TURMOB Bilgileri:")
-            print(f"Vergi Dairesi: {vergi_dairesi}")
-            print(f"Unvan: {unvan}")
-            print(f"Adres: {tam_adres}")
-            print(f"İl: {il}")
-            print(f"İlçe: {ilce}")
+            # TURMOB verilerini çıkart
+            vergi_dairesi = turmob_data.get('VERGIDAIRESI', '')
+            unvan = turmob_data.get('UNVAN', '')
+            tam_adres = turmob_data.get('TAMADRES', '')
+            il = turmob_data.get('IL', '')
+            ilce = turmob_data.get('ILCE', '')
             
             return alias, vergi_dairesi, unvan, tam_adres, il, ilce
             
+        except zeep.exceptions.Fault as e:
+            error_details = {
+                "error_type": "SOAP_FAULT",
+                "vkn": vkn,
+                "turmob_header": turmob_header,
+                "fault_code": getattr(e, 'code', 'Unknown'),
+                "fault_message": str(e),
+                "traceback": traceback.format_exc()
+            }
+            save_error_log("TURMOB_SOAP_ERROR", f"SOAP Fault: {str(e)}", error_details)
+            print(f"❌ TURMOB SOAP hatası: {str(e)}")
+            return alias, None, None, None, None, None
+        except zeep.exceptions.TransportError as e:
+            error_details = {
+                "error_type": "TRANSPORT_ERROR",
+                "vkn": vkn,
+                "turmob_header": turmob_header,
+                "status_code": getattr(e, 'status_code', 'Unknown'),
+                "traceback": traceback.format_exc()
+            }
+            save_error_log("TURMOB_TRANSPORT_ERROR", f"Transport Error: {str(e)}", error_details)
+            print(f"❌ TURMOB transport hatası: {str(e)}")
+            return alias, None, None, None, None, None
         except Exception as e:
-            print(f"\n❌ TURMOB bilgileri alınırken hata: {str(e)}")
-            traceback.print_exc()
+            error_details = {
+                "error_type": type(e).__name__,
+                "vkn": vkn,
+                "turmob_header": turmob_header,
+                "traceback": traceback.format_exc()
+            }
+            save_error_log("TURMOB_UNEXPECTED_ERROR", str(e), error_details)
+            print(f"❌ TURMOB hatası: {str(e)}")
             return alias, None, None, None, None, None
 
     except Exception as e:
-        print(f"\n❌ CheckUser işleminde hata: {str(e)}")
+        error_details = {
+            "error_type": type(e).__name__,
+            "vkn": vkn,
+            "request_header": request_header,
+            "traceback": traceback.format_exc()
+        }
+        save_error_log("CHECK_USER_UNEXPECTED_ERROR", str(e), error_details)
+        print(f"❌ CheckUser hatası: {str(e)}")
         traceback.print_exc()
         return None, None, None, None, None, None
 
@@ -1241,6 +1370,11 @@ def process_new_invoices(license_no=1):
         invoice_data = get_invoice_data(license_no)
         
         if not invoice_data:
+            save_error_log(
+                "NO_INVOICE_DATA",
+                f"İşlenecek {company_name} fatura verisi bulunamadı",
+                {"company": company_name, "license_no": license_no}
+            )
             print(f"⚠️ İşlenecek {company_name} fatura verisi bulunamadı")
             return
         
@@ -1353,6 +1487,12 @@ EDM sistemine bağlanılamadı.
         send_telegram_notification(end_notification)
 
     except Exception as e:
+        error_details = {
+            "company": company_name,
+            "license_no": license_no,
+            "traceback": traceback.format_exc()
+        }
+        save_error_log("PROCESS_INVOICES_ERROR", str(e), error_details)
         print(f"\n❌ Genel hata: {str(e)}")
         traceback.print_exc()
         
@@ -1408,6 +1548,9 @@ def main():
         print(f"\n🔄 Fatura işleme servisi başlatıldı (Yerel Saat: {local_now.strftime('%H:%M:%S')})")
         send_telegram_notification(f"<b>🚀 Fatura İşleme Servisi Başlatıldı</b>\n<b>Yerel Saat:</b> {local_now.strftime('%H:%M:%S')}")
         
+        # Log klasörünü kontrol et
+        ensure_log_directory()
+        
         # İlk çalıştırmada hem Avis hem Budget faturalarını işle
         process_new_invoices(1)  # Avis
         time.sleep(60)  # 1 dakika bekle
@@ -1415,8 +1558,9 @@ def main():
         
         # Her 1 dakikada bir sırayla Avis ve Budget kontrolü yap
         while True:
-            # Gece yarısı kontrolü
+            # Gece yarısı kontrolü ve eski logları temizle
             check_and_reset_at_midnight()
+            cleanup_old_logs()
             
             local_now = get_local_time()
             print(f"\n⏳ Bir sonraki Avis kontrolü için bekleniyor... (Yerel Saat: {local_now.strftime('%H:%M:%S')})")
@@ -1445,10 +1589,20 @@ def main():
             
     except KeyboardInterrupt:
         local_now = get_local_time()
+        save_error_log(
+            "SERVICE_STOPPED",
+            "Kullanıcı tarafından durduruldu",
+            {"stop_time": local_now.strftime('%Y-%m-%d %H:%M:%S')}
+        )
         print(f"\n⚠️ Kullanıcı tarafından durduruldu (Yerel Saat: {local_now.strftime('%H:%M:%S')})")
         send_telegram_notification(f"<b>⚠️ Fatura İşleme Servisi Durduruldu</b>\n<b>Yerel Saat:</b> {local_now.strftime('%H:%M:%S')}")
     except Exception as e:
         local_now = get_local_time()
+        error_details = {
+            "traceback": traceback.format_exc(),
+            "stop_time": local_now.strftime('%Y-%m-%d %H:%M:%S')
+        }
+        save_error_log("MAIN_LOOP_ERROR", str(e), error_details)
         print(f"\n❌ Ana döngüde hata: {str(e)}")
         traceback.print_exc()
         
@@ -1536,14 +1690,84 @@ def check_updated_xml(xml_path, invoice_data, namespaces):
     except Exception as e:
         print(f"❌ XML kontrol hatası: {str(e)}")
 
+def ensure_log_directory():
+    """Log klasörünün varlığını kontrol eder ve yoksa oluşturur"""
+    if not os.path.exists(LOG_DIRECTORY):
+        os.makedirs(LOG_DIRECTORY)
+        print(f"✅ Log klasörü oluşturuldu: {LOG_DIRECTORY}")
+
+def get_log_filename():
+    """O günün tarihine göre log dosyası adını oluşturur"""
+    local_now = get_local_time()
+    return os.path.join(LOG_DIRECTORY, f"error_log_{local_now.strftime('%Y%m%d')}.json")
+
+def load_daily_error_log():
+    """Günlük hata log dosyasını yükler"""
+    filename = get_log_filename()
+    try:
+        if os.path.exists(filename):
+            with open(filename, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        return {"errors": []}
+    except Exception as e:
+        print(f"❌ Hata log dosyası yüklenirken hata: {str(e)}")
+        return {"errors": []}
+
+def save_error_log(error_type, error_message, additional_info=None):
+    """Hata bilgisini günlük log dosyasına kaydeder"""
+    try:
+        local_now = get_local_time()
+        
+        # Log klasörünün varlığını kontrol et
+        ensure_log_directory()
+        
+        # Mevcut logları yükle
+        error_logs = load_daily_error_log()
+        
+        # Yeni hata kaydı
+        error_entry = {
+            "timestamp": local_now.strftime('%Y-%m-%d %H:%M:%S'),
+            "error_type": error_type,
+            "error_message": str(error_message),
+            "additional_info": additional_info or {}
+        }
+        
+        # Hatayı listeye ekle
+        error_logs["errors"].append(error_entry)
+        
+        # Dosyaya kaydet
+        with open(get_log_filename(), 'w', encoding='utf-8') as f:
+            json.dump(error_logs, f, indent=2, ensure_ascii=False)
+            
+        print(f"✅ Hata logu kaydedildi: {error_type}")
+        return True
+    except Exception as e:
+        print(f"❌ Hata logu kaydedilirken hata: {str(e)}")
+        return False
+
+def cleanup_old_logs():
+    """5 günden eski log dosyalarını siler"""
+    try:
+        local_now = get_local_time()
+        cutoff_date = local_now - timedelta(days=5)
+        
+        # Log klasöründeki tüm dosyaları kontrol et
+        for log_file in glob.glob(os.path.join(LOG_DIRECTORY, 'error_log_*.json')):
+            try:
+                # Dosya adından tarihi çıkar
+                file_date_str = log_file.split('_')[-1].split('.')[0]
+                file_date = datetime.strptime(file_date_str, '%Y%m%d')
+                
+                # 5 günden eski ise sil
+                if file_date.date() < cutoff_date.date():
+                    os.remove(log_file)
+                    print(f"✅ Eski log dosyası silindi: {log_file}")
+            except Exception as e:
+                print(f"⚠️ Log dosyası silinirken hata: {log_file} - {str(e)}")
+    except Exception as e:
+        print(f"❌ Log temizleme hatası: {str(e)}")
+
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
 
     # bu dosyada avis ve budgettan birer dakika ara  ile  verileri alıyor ve faturaları yüklüyor. 
