@@ -433,81 +433,154 @@ def check_user_and_get_info(client, session_id, vkn):
             print("⚠️ E-Arşiv faturası olarak işleme devam edilecek")
             return None, None, None, None, None, None
             
-        # TURMOB bilgilerini al
-        print("\n🔄 TURMOB Bilgileri Alınıyor...")
-        turmob_header = {
-            "SESSION_ID": session_id,
-            "CLIENT_TXN_ID": str(uuid.uuid4()),
-            "ACTION_DATE": get_local_time().strftime("%Y-%m-%d"),
-            "REASON": "test",
-            "APPLICATION_NAME": "EDMTEST",
-            "HOSTNAME": "BALCIAS",
-            "CHANNEL_NAME": "EDM",
-            "COMPRESSED": "N"
-        }
+        # TURMOB bilgilerini al - Yeniden deneme mekanizması ile
+        max_turmob_attempts = 2  # Maksimum 2 deneme
+        turmob_retry_delay = 3  # 3 saniye bekleme süresi
+        turmob_success = False  # TURMOB sorgusu başarı durumu
         
-        try:
-            print("\n📤 TURMOB İsteği Gönderiliyor...")
-            print(f"VKN: {vkn}")
-            print(f"Session ID: {session_id}")
+        for attempt in range(max_turmob_attempts):
+            print(f"\n🔄 TURMOB Bilgileri Alınıyor... (Deneme {attempt + 1}/{max_turmob_attempts})")
+            turmob_header = {
+                "SESSION_ID": session_id,
+                "CLIENT_TXN_ID": str(uuid.uuid4()),
+                "ACTION_DATE": get_local_time().strftime("%Y-%m-%d"),
+                "REASON": "test",
+                "APPLICATION_NAME": "EDMTEST",
+                "HOSTNAME": "BALCIAS",
+                "CHANNEL_NAME": "EDM",
+                "COMPRESSED": "N"
+            }
             
-            # TURMOB bilgilerini al
-            turmob_response = client.service.GetTurmob(REQUEST_HEADER=turmob_header, VKN=vkn)
-            
-            if not turmob_response:
+            try:
+                print("\n📤 TURMOB İsteği Gönderiliyor...")
+                print(f"VKN: {vkn}")
+                print(f"Session ID: {session_id}")
+                
+                # TURMOB bilgilerini al
+                turmob_response = client.service.GetTurmob(REQUEST_HEADER=turmob_header, VKN=vkn)
+                
+                if not turmob_response:
+                    error_details = {
+                        "vkn": vkn,
+                        "turmob_header": turmob_header,
+                        "attempt": attempt + 1
+                    }
+                    save_error_log("TURMOB_NO_DATA", f"VKN {vkn} için TURMOB verisi bulunamadı", error_details)
+                    print("\n⚠️ TURMOB verisi bulunamadı")
+                    
+                    if attempt < max_turmob_attempts - 1:
+                        print(f"⏳ {turmob_retry_delay} saniye bekleyip tekrar deneniyor...")
+                        time.sleep(turmob_retry_delay)
+                        continue
+                    else:
+                        print("❌ Maksimum deneme sayısına ulaşıldı. TURMOB verisi alınamadı.")
+                        print("⚠️ Bu kayıt atlanıyor ve sonraki kayda geçiliyor.")
+                        return False  # İşlemi sonlandır ve sonraki kayda geç
+                
+                # TURMOB yanıtını serialize et
+                turmob_data = serialize_object(turmob_response)
+                
+                # TURMOB verilerini çıkart
+                vergi_dairesi = turmob_data.get('VERGIDAIRESI', '')
+                unvan = turmob_data.get('UNVAN', '')
+                tam_adres = turmob_data.get('TAMADRES', '')
+                il = turmob_data.get('IL', '')
+                ilce = turmob_data.get('ILCE', '')
+                
+                # Zorunlu alanların kontrolü
+                if not all([vergi_dairesi, unvan]):
+                    print("\n⚠️ TURMOB verisinde zorunlu alanlar eksik")
+                    if attempt < max_turmob_attempts - 1:
+                        print(f"⏳ {turmob_retry_delay} saniye bekleyip tekrar deneniyor...")
+                        time.sleep(turmob_retry_delay)
+                        continue
+                    else:
+                        print("❌ Maksimum deneme sayısına ulaşıldı. TURMOB verisi eksik.")
+                        print("⚠️ Bu kayıt atlanıyor ve sonraki kayda geçiliyor.")
+                        return False  # İşlemi sonlandır ve sonraki kayda geç
+                
+                print("\n✅ TURMOB bilgileri başarıyla alındı")
+                turmob_success = True
+                return alias, vergi_dairesi, unvan, tam_adres, il, ilce
+                
+            except zeep.exceptions.Fault as e:
                 error_details = {
+                    "error_type": "SOAP_FAULT",
                     "vkn": vkn,
-                    "turmob_header": turmob_header
+                    "turmob_header": turmob_header,
+                    "fault_code": getattr(e, 'code', 'Unknown'),
+                    "fault_message": str(e),
+                    "attempt": attempt + 1,
+                    "traceback": traceback.format_exc()
                 }
-                save_error_log("TURMOB_NO_DATA", f"VKN {vkn} için TURMOB verisi bulunamadı", error_details)
-                print("\n⚠️ TURMOB verisi bulunamadı")
-                return alias, None, None, None, None, None
-            
-            # TURMOB yanıtını serialize et
-            turmob_data = serialize_object(turmob_response)
-            
-            # TURMOB verilerini çıkart
-            vergi_dairesi = turmob_data.get('VERGIDAIRESI', '')
-            unvan = turmob_data.get('UNVAN', '')
-            tam_adres = turmob_data.get('TAMADRES', '')
-            il = turmob_data.get('IL', '')
-            ilce = turmob_data.get('ILCE', '')
-            
-            return alias, vergi_dairesi, unvan, tam_adres, il, ilce
-            
-        except zeep.exceptions.Fault as e:
-            error_details = {
-                "error_type": "SOAP_FAULT",
-                "vkn": vkn,
-                "turmob_header": turmob_header,
-                "fault_code": getattr(e, 'code', 'Unknown'),
-                "fault_message": str(e),
-                "traceback": traceback.format_exc()
-            }
-            save_error_log("TURMOB_SOAP_ERROR", f"SOAP Fault: {str(e)}", error_details)
-            print(f"❌ TURMOB SOAP hatası: {str(e)}")
-            return alias, None, None, None, None, None
-        except zeep.exceptions.TransportError as e:
-            error_details = {
-                "error_type": "TRANSPORT_ERROR",
-                "vkn": vkn,
-                "turmob_header": turmob_header,
-                "status_code": getattr(e, 'status_code', 'Unknown'),
-                "traceback": traceback.format_exc()
-            }
-            save_error_log("TURMOB_TRANSPORT_ERROR", f"Transport Error: {str(e)}", error_details)
-            print(f"❌ TURMOB transport hatası: {str(e)}")
-            return alias, None, None, None, None, None
-        except Exception as e:
-            error_details = {
-                "error_type": type(e).__name__,
-                "vkn": vkn,
-                "turmob_header": turmob_header,
-                "traceback": traceback.format_exc()
-            }
-            save_error_log("TURMOB_UNEXPECTED_ERROR", str(e), error_details)
-            print(f"❌ TURMOB hatası: {str(e)}")
-            return alias, None, None, None, None, None
+                save_error_log("TURMOB_SOAP_ERROR", f"SOAP Fault: {str(e)}", error_details)
+                print(f"❌ TURMOB SOAP hatası: {str(e)}")
+                
+                if "Hata Oluştu. Lütfen Hata Detayına bakınız" in str(e):
+                    if attempt < max_turmob_attempts - 1:
+                        print(f"⏳ {turmob_retry_delay} saniye bekleyip tekrar deneniyor...")
+                        time.sleep(turmob_retry_delay)
+                        continue
+                    else:
+                        print("❌ Maksimum deneme sayısına ulaşıldı. TURMOB sorgusu başarısız.")
+                        print("⚠️ Bu kayıt atlanıyor ve sonraki kayda geçiliyor.")
+                        return False  # İşlemi sonlandır ve sonraki kayda geç
+                
+                if attempt < max_turmob_attempts - 1:
+                    print(f"⏳ {turmob_retry_delay} saniye bekleyip tekrar deneniyor...")
+                    time.sleep(turmob_retry_delay)
+                    continue
+                else:
+                    print("❌ Maksimum deneme sayısına ulaşıldı. TURMOB sorgusu başarısız.")
+                    print("⚠️ Bu kayıt atlanıyor ve sonraki kayda geçiliyor.")
+                    return False  # İşlemi sonlandır ve sonraki kayda geç
+                
+            except zeep.exceptions.TransportError as e:
+                error_details = {
+                    "error_type": "TRANSPORT_ERROR",
+                    "vkn": vkn,
+                    "turmob_header": turmob_header,
+                    "status_code": getattr(e, 'status_code', 'Unknown'),
+                    "attempt": attempt + 1,
+                    "traceback": traceback.format_exc()
+                }
+                save_error_log("TURMOB_TRANSPORT_ERROR", f"Transport Error: {str(e)}", error_details)
+                print(f"❌ TURMOB transport hatası: {str(e)}")
+                
+                if attempt < max_turmob_attempts - 1:
+                    print(f"⏳ {turmob_retry_delay} saniye bekleyip tekrar deneniyor...")
+                    time.sleep(turmob_retry_delay)
+                    continue
+                else:
+                    print("❌ Maksimum deneme sayısına ulaşıldı. TURMOB sorgusu başarısız.")
+                    print("⚠️ Bu kayıt atlanıyor ve sonraki kayda geçiliyor.")
+                    return False  # İşlemi sonlandır ve sonraki kayda geç
+                
+            except Exception as e:
+                error_details = {
+                    "error_type": type(e).__name__,
+                    "vkn": vkn,
+                    "turmob_header": turmob_header,
+                    "attempt": attempt + 1,
+                    "traceback": traceback.format_exc()
+                }
+                save_error_log("TURMOB_UNEXPECTED_ERROR", str(e), error_details)
+                print(f"❌ TURMOB hatası: {str(e)}")
+                
+                if attempt < max_turmob_attempts - 1:
+                    print(f"⏳ {turmob_retry_delay} saniye bekleyip tekrar deneniyor...")
+                    time.sleep(turmob_retry_delay)
+                    continue
+                else:
+                    print("❌ Maksimum deneme sayısına ulaşıldı. TURMOB sorgusu başarısız.")
+                    print("⚠️ Bu kayıt atlanıyor ve sonraki kayda geçiliyor.")
+                    return False  # İşlemi sonlandır ve sonraki kayda geç
+        
+        # Eğer buraya kadar geldiyse ve başarılı olamadıysa
+        if not turmob_success:
+            print("\n❌ TURMOB bilgileri alınamadı.")
+            print("⚠️ Bu kayıt atlanıyor ve sonraki kayda geçiliyor.")
+            return False  # İşlemi sonlandır ve sonraki kayda geç
 
     except Exception as e:
         error_details = {
@@ -519,7 +592,8 @@ def check_user_and_get_info(client, session_id, vkn):
         save_error_log("CHECK_USER_UNEXPECTED_ERROR", str(e), error_details)
         print(f"❌ CheckUser hatası: {str(e)}")
         traceback.print_exc()
-        return None, None, None, None, None, None
+        print("⚠️ Bu kayıt atlanıyor ve sonraki kayda geçiliyor.")
+        return False  # İşlemi sonlandır ve sonraki kayda geç
 
 def send_telegram_notification(message):
     try:
