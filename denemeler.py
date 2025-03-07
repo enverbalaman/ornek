@@ -342,7 +342,7 @@ def edm_login():
         traceback.print_exc()
         return None, None
 
-def check_user_and_get_info(client, session_id, vkn):
+def check_user_and_get_info(client, session_id, vkn, license_no=1):  # license_no parametresi kalacak ama kullanılmayacak
     print("\n" + "="*50)
     print(f"🔍 CheckUser İşlemi Başlatıldı - VKN: {vkn}")
     print("="*50)
@@ -1427,7 +1427,7 @@ EDM sistemine bağlanılamadı.
                 continue
 
             # Firma bilgilerini kontrol et
-            alias, vergi_dairesi, unvan, tam_adres, il, ilce = check_user_and_get_info(client, session_id, vkn)
+            alias, vergi_dairesi, unvan, tam_adres, il, ilce = check_user_and_get_info(client, session_id, vkn, license_no)
             
             # E-fatura mükellefi değilse veya bilgiler alınamadıysa API'den gelen bilgileri kullan
             if not alias:
