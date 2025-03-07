@@ -70,7 +70,7 @@ def check_and_refresh_token():
         print(f"✅ Token geçerli. Kalan süre: {int(remaining_time)} saniye")
         return otokoc_token
 
-def get_invoice_data():
+def get_invoice_data(license_no=1):
     """Otokoc API'den fatura verilerini çeker"""
     try:
         # Token kontrolü ve yenileme
@@ -79,7 +79,8 @@ def get_invoice_data():
             print("❌ Geçerli token olmadan fatura verileri çekilemez")
             return []
         
-        print("\n📊 Otokoc API'den fatura verileri çekiliyor...")
+        company_name = "Avis" if license_no == 1 else "Budget"
+        print(f"\n📊 Otokoc API'den {company_name} fatura verileri çekiliyor...")
         
         url = "https://merkezwebapi.otokoc.com.tr/STDealer/GetInvoiceList"
         
@@ -91,7 +92,7 @@ def get_invoice_data():
 
         payload = {
             "Token": token,
-            "LicenseNo": 1,
+            "LicenseNo": license_no,  # 1 for Avis, 2 for Budget
             "InvoiceDate": "",
             "StartDate": yesterday,
             "EndDate": today
@@ -114,12 +115,12 @@ def get_invoice_data():
             response_data = response.json()
         
         if 'Data' not in response_data or 'Invoices' not in response_data['Data']:
-            print(f"❌ Otokoc API'den fatura verileri çekilemedi: Geçersiz yanıt formatı")
+            print(f"❌ Otokoc API'den {company_name} fatura verileri çekilemedi: Geçersiz yanıt formatı")
             print(f"Yanıt: {json.dumps(response_data, indent=2, ensure_ascii=False)}")
             return []
 
         invoices = response_data['Data']['Invoices']
-        print(f"✅ Otokoc API'den {len(invoices)} fatura verisi çekildi")
+        print(f"✅ Otokoc API'den {len(invoices)} {company_name} fatura verisi çekildi")
         
         # Yanıt formatını kontrol et ve debug için yazdır
         if invoices and len(invoices) > 0:
@@ -200,11 +201,11 @@ def get_invoice_data():
         return unprocessed_invoices
         
     except requests.exceptions.RequestException as e:
-        print(f"❌ Otokoc API fatura verileri çekme hatası: {str(e)}")
+        print(f"❌ Otokoc API {company_name} fatura verileri çekme hatası: {str(e)}")
         traceback.print_exc()
         return []
     except Exception as e:
-        print(f"❌ Otokoc API fatura verileri çekme hatası: {str(e)}")
+        print(f"❌ Otokoc API {company_name} fatura verileri çekme hatası: {str(e)}")
         traceback.print_exc()
         return []
 
@@ -1226,17 +1227,18 @@ def save_processed_invoice(invoice_no):
         print(f"❌ İşlenmiş fatura kaydedilirken hata: {str(e)}")
         return False
 
-def process_new_invoices():
+def process_new_invoices(license_no=1):
     try:
+        company_name = "Avis" if license_no == 1 else "Budget"
         # Fatura verilerini Otokoc API'den çek
-        invoice_data = get_invoice_data()
+        invoice_data = get_invoice_data(license_no)
         
         if not invoice_data:
-            print("⚠️ İşlenecek fatura verisi bulunamadı")
+            print(f"⚠️ İşlenecek {company_name} fatura verisi bulunamadı")
             return
         
         # Yeni faturalar varsa EDM'ye bağlan
-        print(f"\n📋 Toplam {len(invoice_data)} yeni kayıt işlenecek")
+        print(f"\n📋 Toplam {len(invoice_data)} yeni {company_name} kaydı işlenecek")
         
         # EDM'ye bağlan
         client, session_id = edm_login()
@@ -1245,7 +1247,7 @@ def process_new_invoices():
             
             # Bağlantı hatası bildirimi
             error_notification = f"""
-<b>❌ EDM Bağlantı Hatası</b>
+<b>❌ EDM Bağlantı Hatası ({company_name})</b>
 
 <b>Hata Mesajı:</b>
 EDM sistemine bağlanılamadı.
@@ -1257,7 +1259,7 @@ EDM sistemine bağlanılamadı.
         
         # İşlem başlangıç bildirimi
         start_notification = f"""
-<b>🚀 Yeni Fatura İşlemleri Başlatıldı</b>
+<b>🚀 Yeni {company_name} Fatura İşlemleri Başlatıldı</b>
 
 <b>Toplam İşlenecek Kayıt:</b> {len(invoice_data)}
 <b>Başlangıç Tarihi:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}
@@ -1332,7 +1334,7 @@ EDM sistemine bağlanılamadı.
         
         # İşlem sonuç bildirimi
         end_notification = f"""
-<b>🏁 Yeni Fatura İşlemleri Tamamlandı</b>
+<b>🏁 Yeni {company_name} Fatura İşlemleri Tamamlandı</b>
 
 <b>Sonuç Özeti:</b>
 🔹 <b>Toplam İşlenen Kayıt:</b> {len(invoice_data)}
@@ -1363,17 +1365,22 @@ def main():
         print("\n🔄 Fatura işleme servisi başlatıldı")
         send_telegram_notification("<b>🚀 Fatura İşleme Servisi Başlatıldı</b>")
         
-        # İlk çalıştırmada tüm faturaları işle
-        process_new_invoices()
+        # İlk çalıştırmada hem Avis hem Budget faturalarını işle
+        process_new_invoices(1)  # Avis
+        time.sleep(60)  # 1 dakika bekle
+        process_new_invoices(2)  # Budget
         
-        # Her 1 dakikada bir yeni faturaları kontrol et
+        # Her 1 dakikada bir sırayla Avis ve Budget kontrolü yap
         while True:
-            print(f"\n⏳ Bir sonraki kontrol için bekleniyor... ({datetime.now().strftime('%H:%M:%S')})")
+            print(f"\n⏳ Bir sonraki Avis kontrolü için bekleniyor... ({datetime.now().strftime('%H:%M:%S')})")
             time.sleep(60)  # 60 saniye bekle
-            print(f"\n🔍 Yeni faturalar kontrol ediliyor... ({datetime.now().strftime('%H:%M:%S')})")
+            print(f"\n🔍 Yeni Avis faturaları kontrol ediliyor... ({datetime.now().strftime('%H:%M:%S')})")
+            process_new_invoices(1)  # Avis
             
-            # Yeni faturaları işle
-            process_new_invoices()
+            print(f"\n⏳ Bir sonraki Budget kontrolü için bekleniyor... ({datetime.now().strftime('%H:%M:%S')})")
+            time.sleep(60)  # 60 saniye bekle
+            print(f"\n🔍 Yeni Budget faturaları kontrol ediliyor... ({datetime.now().strftime('%H:%M:%S')})")
+            process_new_invoices(2)  # Budget
             
     except KeyboardInterrupt:
         print("\n⚠️ Kullanıcı tarafından durduruldu")
