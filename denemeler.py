@@ -21,6 +21,13 @@ PROCESSED_INVOICES_FILE = 'processed_invoices.json'
 otokoc_token = None
 token_expiry_time = None
 
+# Sunucu ve yerel saat farkı (saat cinsinden)
+SERVER_TIME_DIFFERENCE = 3
+
+def get_local_time():
+    """Sunucu saatinden yerel saati hesaplar (3 saat ileri)"""
+    return datetime.now() + timedelta(hours=SERVER_TIME_DIFFERENCE)
+
 def get_otokoc_token():
     """Otokoc API'den token alır"""
     global otokoc_token, token_expiry_time
@@ -28,7 +35,6 @@ def get_otokoc_token():
     try:
         print("\n🔑 Otokoc API'den token alınıyor...")
         
-        # IP bilgilerini al ve göster
         url = "https://merkezwebapi.otokoc.com.tr/STDealer/GetToken"
         payload = {
             "Username": "UrartuTrz",
@@ -36,7 +42,7 @@ def get_otokoc_token():
         }
         
         response = requests.post(url, json=payload)
-        response.raise_for_status()  # HTTP hatalarını yakala
+        response.raise_for_status()
         response_data = response.json()
         
         if 'Data' not in response_data or 'Token' not in response_data['Data']:
@@ -45,14 +51,10 @@ def get_otokoc_token():
             return None
         
         otokoc_token = response_data['Data']['Token']
-        # Token geçerlilik süresi 4 dakika
-        token_expiry_time = datetime.now() + timedelta(minutes=4)
+        # Token geçerlilik süresi 4 dakika (yerel zamana göre)
+        token_expiry_time = get_local_time() + timedelta(minutes=4)
         print(f"✅ Otokoc API'den token alındı. Geçerlilik: {token_expiry_time.strftime('%H:%M:%S')}")
         return otokoc_token
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Otokoc API token alma hatası: {str(e)}")
-        traceback.print_exc()
-        return None
     except Exception as e:
         print(f"❌ Otokoc API token alma hatası: {str(e)}")
         traceback.print_exc()
@@ -62,11 +64,12 @@ def check_and_refresh_token():
     """Token geçerliliğini kontrol eder ve gerekirse yeniler"""
     global otokoc_token, token_expiry_time
     
-    if not otokoc_token or not token_expiry_time or datetime.now() >= token_expiry_time:
+    local_now = get_local_time()
+    if not otokoc_token or not token_expiry_time or local_now >= token_expiry_time:
         print("⚠️ Token geçersiz veya süresi dolmuş, yenileniyor...")
         return get_otokoc_token()
     else:
-        remaining_time = (token_expiry_time - datetime.now()).total_seconds()
+        remaining_time = (token_expiry_time - local_now).total_seconds()
         print(f"✅ Token geçerli. Kalan süre: {int(remaining_time)} saniye")
         return otokoc_token
 
@@ -84,17 +87,19 @@ def get_invoice_data(license_no=1):
         
         url = "https://merkezwebapi.otokoc.com.tr/STDealer/GetInvoiceList"
         
-        # Dünün tarihini al
-        yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
-        today = datetime.now().strftime("%Y%m%d")
+        # Yerel zamana göre dün ve bugün
+        local_now = get_local_time()
+        yesterday = (local_now - timedelta(days=1)).strftime("%Y%m%d")
+        today = local_now.strftime("%Y%m%d")
         
         print(f"🗓️ Tarih aralığı: {yesterday} - {today}")
+        print(f"🕒 Yerel Saat: {local_now.strftime('%H:%M:%S')}")
 
         payload = {
             "Token": token,
             "LicenseNo": license_no,  # 1 for Avis, 2 for Budget
             "InvoiceDate": "",
-            "StartDate": yesterday,
+            "StartDate": today,
             "EndDate": today
         }
         
@@ -215,7 +220,8 @@ def edm_login():
         wsdl_url = "https://portal2.edmbilisim.com.tr/EFaturaEDM/EFaturaEDM.svc?wsdl"
         client = Client(wsdl=wsdl_url)
         
-        action_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+03:00"
+        # Yerel saate göre action_date
+        action_date = get_local_time().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+03:00"
         login_request_header = {
             "SESSION_ID": str(uuid.uuid4()),
             "CLIENT_TXN_ID": str(uuid.uuid4()),
@@ -249,7 +255,7 @@ def check_user_and_get_info(client, session_id, vkn):
     print(f"🔍 CheckUser İşlemi Başlatıldı - VKN: {vkn}")
     print("="*50)
     
-    action_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+03:00"
+    action_date = get_local_time().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+03:00"
 
     request_header = {
         "SESSION_ID": session_id,
@@ -304,7 +310,7 @@ def check_user_and_get_info(client, session_id, vkn):
         turmob_header = {
             "SESSION_ID": session_id,
             "CLIENT_TXN_ID": str(uuid.uuid4()),
-            "ACTION_DATE": datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+03:00",
+            "ACTION_DATE": get_local_time().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+03:00",
             "REASON": "test",
             "APPLICATION_NAME": "EDMTEST",
             "HOSTNAME": "BALCIAS",
@@ -505,8 +511,8 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
         }
 
         # Güncel tarih ve saat
-        current_date = datetime.now().strftime('%Y-%m-%d')
-        current_time = datetime.now().strftime('%H:%M:%S')
+        current_date = get_local_time().strftime('%Y-%m-%d')
+        current_time = get_local_time().strftime('%H:%M:%S')
 
         # Tüm IssueDate elementlerini güncelle
         for issue_date in root.findall('.//cbc:IssueDate', namespaces):
@@ -861,7 +867,7 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
         request_header = {
             "SESSION_ID": session_id,
             "CLIENT_TXN_ID": str(uuid.uuid4()),
-            "ACTION_DATE": datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+03:00",
+            "ACTION_DATE": get_local_time().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+03:00",
             "REASON": "E-fatura/E-Arşiv gönder-al testleri için",
             "APPLICATION_NAME": "EDM MINI CONNECTOR v1.0",
             "HOSTNAME": "MDORA17",
@@ -1006,7 +1012,7 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
 """
                     
                     notification_message += f"""
-<b>İşlem Tarihi:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}
+<b>İşlem Tarihi:</b> {get_local_time().strftime('%d.%m.%Y %H:%M:%S')}
 """
                     
                     # Bildirimi gönder
@@ -1081,7 +1087,7 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
 <b>Hata Mesajı:</b>
 Bilinmeyen hata
 
-<b>İşlem Tarihi:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}
+<b>İşlem Tarihi:</b> {get_local_time().strftime('%d.%m.%Y %H:%M:%S')}
 """
                             send_telegram_notification(error_notification)
                     
@@ -1109,7 +1115,7 @@ Bilinmeyen hata
 <b>Hata Mesajı:</b>
 {str(e)}
 
-<b>İşlem Tarihi:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}
+<b>İşlem Tarihi:</b> {get_local_time().strftime('%d.%m.%Y %H:%M:%S')}
 """
                     send_telegram_notification(error_notification)
                 
@@ -1139,7 +1145,7 @@ Bilinmeyen hata
 <b>Hata Mesajı:</b>
 {str(e)}
 
-<b>İşlem Tarihi:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}
+<b>İşlem Tarihi:</b> {get_local_time().strftime('%d.%m.%Y %H:%M:%S')}
 """
         send_telegram_notification(error_notification)
         
@@ -1211,12 +1217,11 @@ def save_processed_invoice(invoice_no):
     try:
         processed_data = load_processed_invoices()
         
-        # Fatura numarası zaten işlenmişse ekleme
         if invoice_no not in processed_data["processed_invoices"]:
             processed_data["processed_invoices"].append(invoice_no)
         
-        # Son kontrol zamanını güncelle
-        processed_data["last_check_time"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        # Son kontrol zamanını yerel saat ile güncelle
+        processed_data["last_check_time"] = get_local_time().strftime('%Y-%m-%d %H:%M:%S')
         
         with open(PROCESSED_INVOICES_FILE, 'w', encoding='utf-8') as f:
             json.dump(processed_data, f, indent=2, ensure_ascii=False)
@@ -1230,6 +1235,8 @@ def save_processed_invoice(invoice_no):
 def process_new_invoices(license_no=1):
     try:
         company_name = "Avis" if license_no == 1 else "Budget"
+        local_now = get_local_time()
+        
         # Fatura verilerini Otokoc API'den çek
         invoice_data = get_invoice_data(license_no)
         
@@ -1252,7 +1259,7 @@ def process_new_invoices(license_no=1):
 <b>Hata Mesajı:</b>
 EDM sistemine bağlanılamadı.
 
-<b>İşlem Tarihi:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}
+<b>İşlem Tarihi:</b> {get_local_time().strftime('%d.%m.%Y %H:%M:%S')}
 """
             send_telegram_notification(error_notification)
             return
@@ -1262,7 +1269,7 @@ EDM sistemine bağlanılamadı.
 <b>🚀 Yeni {company_name} Fatura İşlemleri Başlatıldı</b>
 
 <b>Toplam İşlenecek Kayıt:</b> {len(invoice_data)}
-<b>Başlangıç Tarihi:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}
+<b>Başlangıç Tarihi:</b> {local_now.strftime('%d.%m.%Y %H:%M:%S')}
 """
         send_telegram_notification(start_notification)
         
@@ -1341,7 +1348,7 @@ EDM sistemine bağlanılamadı.
 🔹 <b>Başarılı İşlem:</b> {success_count}
 🔹 <b>Başarısız İşlem:</b> {fail_count}
 
-<b>Bitiş Tarihi:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}
+<b>Bitiş Tarihi:</b> {get_local_time().strftime('%d.%m.%Y %H:%M:%S')}
 """
         send_telegram_notification(end_notification)
 
@@ -1356,14 +1363,50 @@ EDM sistemine bağlanılamadı.
 <b>Hata Mesajı:</b>
 {str(e)}
 
-<b>İşlem Tarihi:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}
+<b>İşlem Tarihi:</b> {get_local_time().strftime('%d.%m.%Y %H:%M:%S')}
 """
         send_telegram_notification(error_notification)
 
+# İşlenmiş faturaları sıfırla
+def reset_processed_invoices():
+    """Yerel saate göre gece yarısında işlenmiş faturaları sıfırlar"""
+    try:
+        processed_data = {
+            "processed_invoices": [],
+            "last_check_time": get_local_time().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        
+        with open(PROCESSED_INVOICES_FILE, 'w', encoding='utf-8') as f:
+            json.dump(processed_data, f, indent=2, ensure_ascii=False)
+        
+        print(f"✅ İşlenmiş faturalar listesi sıfırlandı - {get_local_time().strftime('%d.%m.%Y %H:%M:%S')}")
+        
+        # Telegram bildirimi gönder
+        notification_message = f"""
+<b>🔄 İşlenmiş Faturalar Listesi Sıfırlandı</b>
+
+<b>Sıfırlama Tarihi:</b> {get_local_time().strftime('%d.%m.%Y %H:%M:%S')}
+"""
+        send_telegram_notification(notification_message)
+        
+        return True
+    except Exception as e:
+        print(f"❌ İşlenmiş faturalar sıfırlanırken hata: {str(e)}")
+        traceback.print_exc()
+        return False
+
+def check_and_reset_at_midnight():
+    """Yerel saate göre gece yarısı kontrolü yapar ve gerekirse listeyi sıfırlar"""
+    local_now = get_local_time()
+    if local_now.hour == 0 and local_now.minute == 0 and 0 <= local_now.second < 2:
+        print("\n🕛 Gece yarısı tespit edildi, işlenmiş faturalar listesi sıfırlanıyor...")
+        reset_processed_invoices()
+
 def main():
     try:
-        print("\n🔄 Fatura işleme servisi başlatıldı")
-        send_telegram_notification("<b>🚀 Fatura İşleme Servisi Başlatıldı</b>")
+        local_now = get_local_time()
+        print(f"\n🔄 Fatura işleme servisi başlatıldı (Yerel Saat: {local_now.strftime('%H:%M:%S')})")
+        send_telegram_notification(f"<b>🚀 Fatura İşleme Servisi Başlatıldı</b>\n<b>Yerel Saat:</b> {local_now.strftime('%H:%M:%S')}")
         
         # İlk çalıştırmada hem Avis hem Budget faturalarını işle
         process_new_invoices(1)  # Avis
@@ -1372,20 +1415,40 @@ def main():
         
         # Her 1 dakikada bir sırayla Avis ve Budget kontrolü yap
         while True:
-            print(f"\n⏳ Bir sonraki Avis kontrolü için bekleniyor... ({datetime.now().strftime('%H:%M:%S')})")
+            # Gece yarısı kontrolü
+            check_and_reset_at_midnight()
+            
+            local_now = get_local_time()
+            print(f"\n⏳ Bir sonraki Avis kontrolü için bekleniyor... (Yerel Saat: {local_now.strftime('%H:%M:%S')})")
             time.sleep(60)  # 60 saniye bekle
-            print(f"\n🔍 Yeni Avis faturaları kontrol ediliyor... ({datetime.now().strftime('%H:%M:%S')})")
+            
+            # Gece yarısı kontrolü
+            check_and_reset_at_midnight()
+            
+            local_now = get_local_time()
+            print(f"\n🔍 Yeni Avis faturaları kontrol ediliyor... (Yerel Saat: {local_now.strftime('%H:%M:%S')})")
             process_new_invoices(1)  # Avis
             
-            print(f"\n⏳ Bir sonraki Budget kontrolü için bekleniyor... ({datetime.now().strftime('%H:%M:%S')})")
+            # Gece yarısı kontrolü
+            check_and_reset_at_midnight()
+            
+            local_now = get_local_time()
+            print(f"\n⏳ Bir sonraki Budget kontrolü için bekleniyor... (Yerel Saat: {local_now.strftime('%H:%M:%S')})")
             time.sleep(60)  # 60 saniye bekle
-            print(f"\n🔍 Yeni Budget faturaları kontrol ediliyor... ({datetime.now().strftime('%H:%M:%S')})")
+            
+            # Gece yarısı kontrolü
+            check_and_reset_at_midnight()
+            
+            local_now = get_local_time()
+            print(f"\n🔍 Yeni Budget faturaları kontrol ediliyor... (Yerel Saat: {local_now.strftime('%H:%M:%S')})")
             process_new_invoices(2)  # Budget
             
     except KeyboardInterrupt:
-        print("\n⚠️ Kullanıcı tarafından durduruldu")
-        send_telegram_notification("<b>⚠️ Fatura İşleme Servisi Durduruldu</b>")
+        local_now = get_local_time()
+        print(f"\n⚠️ Kullanıcı tarafından durduruldu (Yerel Saat: {local_now.strftime('%H:%M:%S')})")
+        send_telegram_notification(f"<b>⚠️ Fatura İşleme Servisi Durduruldu</b>\n<b>Yerel Saat:</b> {local_now.strftime('%H:%M:%S')}")
     except Exception as e:
+        local_now = get_local_time()
         print(f"\n❌ Ana döngüde hata: {str(e)}")
         traceback.print_exc()
         
@@ -1395,7 +1458,7 @@ def main():
 <b>Hata Mesajı:</b>
 {str(e)}
 
-<b>İşlem Tarihi:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}
+<b>İşlem Tarihi:</b> {local_now.strftime('%d.%m.%Y %H:%M:%S')}
 """
         send_telegram_notification(error_notification)
 
@@ -1483,4 +1546,4 @@ if __name__ == "__main__":
 
 
 
-    # bu dosyada avisten veri almıyor ama geri kalan herşey doğru.
+    # bu dosyada avis ve budgettan birer dakika ara  ile  verileri alıyor ve faturaları yüklüyor. 
