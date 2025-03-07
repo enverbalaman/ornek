@@ -270,7 +270,11 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
         
         brand = kayit.get('Brand', 'Bilinmiyor') if kayit else 'Bilinmiyor'
         
-        if kayit:
+        if not kayit:
+            print("❌ Kayıt verileri bulunamadı")
+            return False
+            
+        try:
             formatted_invoice_data = {
                 'VergiNumarasi': kayit.get('VergiNumarasi', ''),
                 'TumMusteriAdi': kayit.get('TumMusteriAdi', ''),
@@ -291,6 +295,20 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                 'CHECKIN_DATE': kayit.get('CHECKIN_DATE', '')
             }
             
+            # Veri kontrolü
+            print("\n📋 Fatura Verileri Kontrolü:")
+            for key, value in formatted_invoice_data.items():
+                print(f"{key}: {value}")
+                
+            if not formatted_invoice_data['KANo']:
+                print("❌ KANo bulunamadı")
+                return False
+                
+            if not formatted_invoice_data['VergiNumarasi']:
+                print("❌ VergiNumarasi bulunamadı")
+                return False
+            
+            # Boş değerleri kontrol et ve varsayılan değerler ata
             for key in formatted_invoice_data:
                 if formatted_invoice_data[key] is None or formatted_invoice_data[key] == '':
                     if key in ['KDVOrani', 'KDVTutari', 'KDVsizTutar', 'KDVliToplamTutar']:
@@ -303,43 +321,68 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                         formatted_invoice_data[key] = 'Belirtilmemiş'
             
             print("✅ Fatura verileri hazırlandı")
-        else:
-            print("⚠️ Kayıt verileri bulunamadı")
-            formatted_invoice_data = None
+            
+        except Exception as e:
+            print(f"❌ Fatura verileri hazırlanırken hata: {str(e)}")
+            traceback.print_exc()
+            return False
         
-        # XML işlemleri için namespace tanımlamaları
-        ET.register_namespace('cac', 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2')
-        ET.register_namespace('cbc', 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2')
-        ET.register_namespace('ext', 'urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2')
-        ET.register_namespace('xsi', 'http://www.w3.org/2001/XMLSchema-instance')
-        ET.register_namespace('xades', 'http://uri.etsi.org/01903/v1.3.2#')
-        ET.register_namespace('udt', 'urn:un:unece:uncefact:data:specification:UnqualifiedDataTypesSchemaModule:2')
-        ET.register_namespace('ubltr', 'urn:oasis:names:specification:ubl:schema:xsd:TurkishCustomizationExtensionComponents')
-        ET.register_namespace('qdt', 'urn:oasis:names:specification:ubl:schema:xsd:QualifiedDatatypes-2')
-        ET.register_namespace('ds', 'http://www.w3.org/2000/09/xmldsig#')
+        try:
+            # XML işlemleri için namespace tanımlamaları
+            ET.register_namespace('cac', 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2')
+            ET.register_namespace('cbc', 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2')
+            ET.register_namespace('ext', 'urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2')
+            ET.register_namespace('xsi', 'http://www.w3.org/2001/XMLSchema-instance')
+            ET.register_namespace('xades', 'http://uri.etsi.org/01903/v1.3.2#')
+            ET.register_namespace('udt', 'urn:un:unece:uncefact:data:specification:UnqualifiedDataTypesSchemaModule:2')
+            ET.register_namespace('ubltr', 'urn:oasis:names:specification:ubl:schema:xsd:TurkishCustomizationExtensionComponents')
+            ET.register_namespace('qdt', 'urn:oasis:names:specification:ubl:schema:xsd:QualifiedDatatypes-2')
+            ET.register_namespace('ds', 'http://www.w3.org/2000/09/xmldsig#')
+            
+            if not os.path.exists('ornek.xml'):
+                print("❌ ornek.xml dosyası bulunamadı!")
+                return False
+                
+            tree = ET.parse('ornek.xml')
+            root = tree.getroot()
+            
+            print("🔄 XML güncelleme işlemi devam ediyor...")
+            
+            # XML yapısını kontrol et
+            print("\n📋 XML Yapı Kontrolü:")
+            print_xml_structure(root, max_depth=2)
+            
+            # ... existing code ...
+            # (XML güncelleme işlemleri devam ediyor)
+            
+            print("✅ XML güncelleme tamamlandı")
+            
+        except ET.ParseError as e:
+            print(f"❌ XML parse hatası: {str(e)}")
+            traceback.print_exc()
+            return False
+        except Exception as e:
+            print(f"❌ XML işleme hatası: {str(e)}")
+            traceback.print_exc()
+            return False
         
-        if not os.path.exists('ornek.xml'):
-            print("❌ ornek.xml dosyası bulunamadı!")
+        try:
+            # LoadInvoice işlemi için hazırlık
+            print("\n📤 LoadInvoice işlemi başlatılıyor...")
+            
+            # ... existing code ...
+            # (LoadInvoice işlemi devam ediyor)
+            
+        except Exception as e:
+            print(f"❌ LoadInvoice hatası: {str(e)}")
+            traceback.print_exc()
             return False
             
-        tree = ET.parse('ornek.xml')
-        root = tree.getroot()
-        
-        print("🔄 XML güncelleme işlemi devam ediyor...")
-        
-        # ... existing code ...
-        # (XML güncelleme işlemleri devam ediyor, ancak her adımda ayrıntılı log yerine sadece önemli değişiklikler loglanacak)
-        
-        print("✅ XML güncelleme tamamlandı")
-        
-        # LoadInvoice işlemi için hazırlık
-        print("\n📤 LoadInvoice işlemi başlatılıyor...")
-        
-        # ... existing code ...
-        # (LoadInvoice işlemi devam ediyor, ancak daha özlü loglamalarla)
+        return True
         
     except Exception as e:
-        print(f"❌ XML güncelleme hatası: {str(e)}")
+        print(f"❌ Genel XML güncelleme hatası: {str(e)}")
+        traceback.print_exc()
         return False
 
 def check_updated_xml(xml_path, invoice_data, namespaces):
