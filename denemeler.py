@@ -1703,10 +1703,10 @@ def main():
         
         # İlk çalıştırmada hem Avis hem Budget faturalarını işle
         process_new_invoices(1)  # Avis
-        time.sleep(60)  # 1 dakika bekle
+        time.sleep(15)  # 15 saniye bekle
         process_new_invoices(2)  # Budget
         
-        # Her 1 dakikada bir sırayla Avis ve Budget kontrolü yap
+        # Her 15 saniyede bir sırayla Avis ve Budget kontrolü yap
         while True:
             # Gece yarısı kontrolü ve eski logları temizle
             check_and_reset_at_midnight()
@@ -1714,7 +1714,7 @@ def main():
             
             local_now = get_local_time()
             print(f"\n⏳ Bir sonraki Avis kontrolü için bekleniyor... (Yerel Saat: {local_now.strftime('%H:%M:%S')})")
-            time.sleep(60)  # 60 saniye bekle
+            time.sleep(15)  # 15 saniye bekle
             
             # Gece yarısı kontrolü
             check_and_reset_at_midnight()
@@ -1728,7 +1728,7 @@ def main():
             
             local_now = get_local_time()
             print(f"\n⏳ Bir sonraki Budget kontrolü için bekleniyor... (Yerel Saat: {local_now.strftime('%H:%M:%S')})")
-            time.sleep(60)  # 60 saniye bekle
+            time.sleep(15)  # 15 saniye bekle
             
             # Gece yarısı kontrolü
             check_and_reset_at_midnight()
