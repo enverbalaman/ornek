@@ -444,12 +444,15 @@ def check_user_and_get_info(client, session_id, vkn):
                 "SESSION_ID": session_id,
                 "CLIENT_TXN_ID": str(uuid.uuid4()),
                 "ACTION_DATE": get_local_time().strftime("%Y-%m-%d"),
-                "REASON": "test",
-                "APPLICATION_NAME": "EDMTEST",
-                "HOSTNAME": "BALCIAS",
-                "CHANNEL_NAME": "EDM",
+                "REASON": "E-fatura/E-Arşiv gönder-al-CANLI",
+                "APPLICATION_NAME": "EDM MINI CONNECTOR v1.0",
+                "HOSTNAME": "EDM MINI CONNECTOR v1.0",
+                "CHANNEL_NAME": "PROD",
                 "COMPRESSED": "N"
             }
+
+         
+        
             
             try:
                 print("\n📤 TURMOB İsteği Gönderiliyor...")
