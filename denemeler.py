@@ -305,7 +305,7 @@ def check_user_and_get_info(client, session_id, vkn):
         turmob_header = {
             "SESSION_ID": session_id,
             "CLIENT_TXN_ID": str(uuid.uuid4()),
-            "ACTION_DATE": datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+03:00",
+            "ACTION_DATE": datetime.now().strftime("%Y-%m-%d"),
             "REASON": "test",
             "APPLICATION_NAME": "EDMTEST",
             "HOSTNAME": "BALCIAS",
@@ -569,33 +569,6 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                         party_name.text = formatted_invoice_data['TumMusteriAdi']
                         print(f"✅ Müşteri adı JSON'dan alındı: {formatted_invoice_data['TumMusteriAdi']}")
                 
-                # Vergi Dairesi güncelleme
-                tax_scheme_name = party.find('.//cac:PartyTaxScheme/cac:TaxScheme/cbc:Name', namespaces)
-                if tax_scheme_name is not None:
-                    tax_scheme_name.text = vergi_dairesi if vergi_dairesi else formatted_invoice_data['VergiDairesi']
-                    print(f"✅ Vergi dairesi güncellendi: {tax_scheme_name.text}")
-
-                # Adres bilgilerini güncelle
-                postal_address = party.find('.//cac:PostalAddress', namespaces)
-                if postal_address is not None:
-                    # Adres için BuildingName kullan
-                    building_name = postal_address.find('./cbc:BuildingName', namespaces)
-                    if building_name is not None:
-                        building_name.text = tam_adres if tam_adres else formatted_invoice_data['Adres']
-                        print(f"✅ Adres güncellendi: {building_name.text}")
-
-                    # İl
-                    city_name = postal_address.find('./cbc:CityName', namespaces)
-                    if city_name is not None:
-                        city_name.text = il if il else formatted_invoice_data['Il']
-                        print(f"✅ İl güncellendi: {city_name.text}")
-
-                    # İlçe
-                    district = postal_address.find('./cbc:CitySubdivisionName', namespaces)
-                    if district is not None:
-                        district.text = ilce if ilce else formatted_invoice_data['Ilce']
-                        print(f"✅ İlçe güncellendi: {district.text}")
-
                 # Kişi bilgileri güncelleme
                 person = party.find('.//cac:Person', namespaces)
                 if person is not None:
@@ -760,64 +733,32 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
 
             # Note elementlerini güncelle
             note_elements = root.findall(".//cbc:Note", namespaces)
-            
-            # Parent elementi bul
             if note_elements:
-                parent = None
-                for elem in root.iter():
-                    for child in list(elem):
-                        if child in note_elements:
-                            parent = elem
-                            break
-                    if parent:
-                        break
+                # İlk Note elementini tutar yazısı için kullan
+                if len(note_elements) >= 1:
+                    note_elements[0].text = f"Yazı ile: # {tutar_yazi} #"
+                    print(f"✅ Tutar yazı ile güncellendi: {note_elements[0].text}")
                 
-                # Tüm note elementlerini temizle
-                if parent:
-                    for note in note_elements:
-                        parent.remove(note)
-                    
-                    # Note elementlerini sırayla ekle
-                    # 1. Note: Tutar yazı ile
-                    note1 = ET.SubElement(parent, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
-                    note1.text = f"Yazı ile: # {tutar_yazi} #"
-                    print(f"✅ Note 1 eklendi: {note1.text}")
-                    
-                    # 2. Note: KA numarası
-                    note2 = ET.SubElement(parent, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
-                    note2.text = f"KA: {formatted_invoice_data['KANo']}"
-                    print(f"✅ Note 2 eklendi: {note2.text}")
-                    
-                    # 3. Note: Kullanıcı adı
-                    note3 = ET.SubElement(parent, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
-                    aciklama = formatted_invoice_data.get('Aciklama', '')
-                    kullanici_adi = ''
-                    if 'Kullanıcı Adı:' in aciklama:
-                        kullanici_adi = aciklama.split('Kullanıcı Adı:')[1].split('Rez')[0].strip()
-                    note3.text = f"KULLANICI: {kullanici_adi}"
-                    print(f"✅ Note 3 eklendi: {note3.text}")
-                    
-                    # 4. Note: Rezervasyon numarası
-                    note4 = ET.SubElement(parent, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
-                    rez_no = ''
-                    if 'CNF:' in aciklama:
-                        rez_no = aciklama.split('CNF:')[1].strip()
-                    note4.text = f"REZ: {rez_no}"
-                    print(f"✅ Note 4 eklendi: {note4.text}")
-                    
-                    # 5. Note: Kullanım tarihleri
-                    note5 = ET.SubElement(parent, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
-                    checkout = formatted_invoice_data.get('CHECKOUT_DATE', '')
-                    checkin = formatted_invoice_data.get('CHECKIN_DATE', '')
-                    try:
-                        checkout_date = datetime.fromisoformat(checkout.replace('Z', '+00:00')).strftime('%d/%m/%Y')
-                        checkin_date = datetime.fromisoformat(checkin.replace('Z', '+00:00')).strftime('%d/%m/%Y')
-                        note5.text = f"KULLANIM TARİHİ : {checkout_date}-{checkin_date}"
-                    except (ValueError, AttributeError):
-                        note5.text = "KULLANIM TARİHİ : Belirtilmemiş"
-                    print(f"✅ Note 5 eklendi: {note5.text}")
-            else:
-                print("⚠️ Note elementleri bulunamadı")
+                # İkinci Note elementini KA numarası için kullan
+                if len(note_elements) >= 2:
+                    note_elements[1].text = f"KA: {formatted_invoice_data['KANo']}"
+                    print(f"✅ KA numarası güncellendi: {note_elements[1].text}")
+                
+                # Üçüncü Note elementini KiraTipi için kullan
+                if len(note_elements) >= 3 and formatted_invoice_data['KiraTipi']:
+                    note_elements[2].text = f"Kira Tipi: {formatted_invoice_data['KiraTipi']}"
+                    print(f"✅ KiraTipi (Note elementinde) güncellendi: {note_elements[2].text}")
+                elif formatted_invoice_data['KiraTipi']:
+                    # Yeni bir Note elementi ekle
+                    invoice_lines = root.findall(".//cac:InvoiceLine", namespaces)
+                    if invoice_lines:
+                        invoice_line = invoice_lines[0]
+                        # Yeni Note elementi oluştur
+                        new_note = ET.SubElement(invoice_line, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
+                        new_note.text = f"Kira Tipi: {formatted_invoice_data['KiraTipi']}"
+                        print(f"✅ KiraTipi için yeni Note elementi eklendi: {new_note.text}")
+                    else:
+                        print("❌ KiraTipi için InvoiceLine elementi bulunamadı")
 
         # Güncellenmiş XML'i kaydet
         updated_xml_path = 'updated_invoice.xml'
@@ -1125,8 +1066,8 @@ Bilinmeyen hata
 
 # Sayıyı yazıya çeviren fonksiyon
 def sayi_to_yazi(sayi):
-    birler = ["", "Bir", "İki", "Üç", "Dört", "Beş", "Altı", "Yedi", "Sekiz", "Dokuz"]
-    onlar = ["", "On", "Yirmi", "Otuz", "Kırk", "Elli", "Altmış", "Yetmiş", "Seksen", "Doksan"]
+    birler = ["", "BİR", "İKİ", "ÜÇ", "DÖRT", "BEŞ", "ALTI", "YEDİ", "SEKİZ", "DOKUZ"]
+    onlar = ["", "ON", "YİRMİ", "OTUZ", "KIRK", "ELLİ", "ALTMIŞ", "YETMİŞ", "SEKSEN", "DOKSAN"]
     
     def yuzler_to_yazi(n):
         if n == 0:
@@ -1137,20 +1078,20 @@ def sayi_to_yazi(sayi):
             return onlar[n // 10] + " " + birler[n % 10]
         else:
             if n // 100 == 1:
-                return "Yüz " + yuzler_to_yazi(n % 100)
+                return "YÜZ " + yuzler_to_yazi(n % 100)
             else:
-                return birler[n // 100] + " Yüz " + yuzler_to_yazi(n % 100)
+                return birler[n // 100] + " YÜZ " + yuzler_to_yazi(n % 100)
     
     def binler_to_yazi(n):
         if n < 1000:
             return yuzler_to_yazi(n)
         elif n < 1000000:
             if n // 1000 == 1:
-                return "Bin " + yuzler_to_yazi(n % 1000)
+                return "BİN " + yuzler_to_yazi(n % 1000)
             else:
-                return yuzler_to_yazi(n // 1000) + " Bin " + yuzler_to_yazi(n % 1000)
+                return yuzler_to_yazi(n // 1000) + " BİN " + yuzler_to_yazi(n % 1000)
         else:
-            return yuzler_to_yazi(n // 1000000) + " Milyon " + binler_to_yazi(n % 1000000)
+            return yuzler_to_yazi(n // 1000000) + " MİLYON " + binler_to_yazi(n % 1000000)
     
     # Sayıyı tam ve kuruş olarak ayır
     tam_kisim = int(sayi)
@@ -1164,13 +1105,13 @@ def sayi_to_yazi(sayi):
     
     # Sonucu birleştir
     if tam_kisim > 0 and kurus_kisim > 0:
-        return f"{tam_yazi} Türk Lirası {kurus_yazi} Kuruş"
+        return f"{tam_yazi} TÜRK LİRASI {kurus_yazi} KURUŞ"
     elif tam_kisim > 0:
-        return f"{tam_yazi} Türk Lirası"
+        return f"{tam_yazi} TÜRK LİRASI"
     elif kurus_kisim > 0:
-        return f"{kurus_yazi} Kuruş"
+        return f"{kurus_yazi} KURUŞ"
     else:
-        return "Sıfır Türk Lirası"
+        return "SIFIR TÜRK LİRASI"
 
 # İşlenmiş faturaları yükle
 def load_processed_invoices():
@@ -1447,7 +1388,6 @@ def check_updated_xml(xml_path, invoice_data, namespaces):
 
 if __name__ == "__main__":
     main()
-
 
 
 
