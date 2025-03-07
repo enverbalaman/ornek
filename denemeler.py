@@ -70,12 +70,115 @@ def check_and_refresh_token():
         print(f"✅ Token geçerli. Kalan süre: {int(remaining_time)} saniye")
         return otokoc_token
 
-def get_invoice_data(brand_data=None):
+def get_invoice_data():
     """Otokoc API'den fatura verilerini çeker"""
     try:
-        if not brand_data:
-            print("❌ Marka verisi bulunamadı")
+        # Token kontrolü ve yenileme
+        token = check_and_refresh_token()
+        if not token:
+            print("❌ Geçerli token olmadan fatura verileri çekilemez")
             return []
+        
+        print("\n📊 Otokoc API'den fatura verileri çekiliyor...")
+        
+        url = "https://merkezwebapi.otokoc.com.tr/STDealer/GetInvoiceList"
+        
+        # Dünün tarihini al
+        yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
+        today = datetime.now().strftime("%Y%m%d")
+        
+        print(f"🗓️ Tarih aralığı: {yesterday} - {today}")
+
+        payload = {
+            "Token": token,
+            "LicenseNo": 1,
+            "InvoiceDate": "",
+            "StartDate": yesterday,
+            "EndDate": today
+        }
+        
+        response = requests.post(url, json=payload)
+        response.raise_for_status()  # HTTP hatalarını yakala
+        response_data = response.json()
+        
+        if response_data.get('MessageEN') == "Token is expired":
+            print("❌ Token süresi dolmuş, yenileniyor...")
+            token = get_otokoc_token()
+            if not token:
+                return []
+            
+            # Yeni token ile tekrar dene
+            payload["Token"] = token
+            response = requests.post(url, json=payload)
+            response.raise_for_status()
+            response_data = response.json()
+        
+        if 'Data' not in response_data or 'Invoices' not in response_data['Data']:
+            print(f"❌ Otokoc API'den fatura verileri çekilemedi: Geçersiz yanıt formatı")
+            print(f"Yanıt: {json.dumps(response_data, indent=2, ensure_ascii=False)}")
+            return []
+
+        invoices = response_data['Data']['Invoices']
+        print(f"✅ Otokoc API'den {len(invoices)} fatura verisi çekildi")
+        
+        # Yanıt formatını kontrol et ve debug için yazdır
+        if invoices and len(invoices) > 0:
+            print(f"\n🔍 Örnek fatura verisi:")
+            print(json.dumps(invoices[0], indent=2, ensure_ascii=False))
+            
+            # Tüm anahtar alanları listele
+            print("\n📋 Fatura veri alanları:")
+            for key in invoices[0].keys():
+                print(f"   - {key}: {invoices[0][key]}")
+        
+        # Saat 16:00'dan sonraki faturaları filtrele
+        filtered_invoices = []
+        for invoice in invoices:
+            # IslemSaati alanını kontrol et
+            islem_saati = invoice.get('IslemSaati', '')
+            if not islem_saati:
+                # IslemSaati yoksa alternatif alanları kontrol et
+                islem_saati = invoice.get('InvoiceDate', '')
+            
+            if islem_saati:
+                try:
+                    # Tarih formatını kontrol et
+                    if 'T' in islem_saati:
+                        # ISO format: 2025-03-05T16:30:00
+                        islem_datetime = datetime.fromisoformat(islem_saati.replace('Z', '+00:00'))
+                    else:
+                        # Diğer olası formatlar
+                        try:
+                            islem_datetime = datetime.strptime(islem_saati, '%Y-%m-%d %H:%M:%S')
+                        except ValueError:
+                            try:
+                                islem_datetime = datetime.strptime(islem_saati, '%d.%m.%Y %H:%M:%S')
+                            except ValueError:
+                                islem_datetime = datetime.strptime(islem_saati, '%d.%m.%Y')
+                    
+                    # Tüm faturaları kabul et, saat kontrolü yapma
+                    filtered_invoices.append(invoice)
+                    print(f"✅ Fatura kabul edildi: {invoice.get('KANo', 'N/A')} - İşlem Saati: {islem_saati}")
+                    
+                except Exception as e:
+                    print(f"⚠️ Tarih dönüştürme hatası ({islem_saati}): {str(e)}")
+                    # Hata durumunda faturayı dahil et
+                    filtered_invoices.append(invoice)
+            else:
+                # İşlem saati bilgisi yoksa faturayı dahil et
+                filtered_invoices.append(invoice)
+                print(f"⚠️ İşlem saati bilgisi olmayan fatura dahil edildi: {invoice.get('KANo', 'N/A')}")
+        
+        print(f"🔍 Filtreleme sonucu: {len(filtered_invoices)}/{len(invoices)} fatura işlenecek")
+        
+        # Ham veriyi logla
+        print("\n📋 İşlenecek Faturaların Ham Verileri:")
+        for idx, invoice in enumerate(filtered_invoices, 1):
+            print(f"\n{'='*50}")
+            print(f"Fatura {idx}/{len(filtered_invoices)}")
+            print(f"{'='*50}")
+            print(json.dumps(invoice, indent=2, ensure_ascii=False))
+            print(f"{'='*50}")
         
         # İşlenmiş faturaları yükle
         processed_data = load_processed_invoices()
@@ -83,22 +186,25 @@ def get_invoice_data(brand_data=None):
         
         # İşlenmemiş faturaları filtrele - KANo kontrolü
         unprocessed_invoices = []
-        for invoice in brand_data:
+        for invoice in filtered_invoices:
             ka_no = invoice.get('KANo', '')
-            brand = invoice.get('Brand', 'Bilinmiyor')
             
             if ka_no and ka_no not in processed_invoices:
                 unprocessed_invoices.append(invoice)
-                print(f"✅ Yeni {brand} faturası bulundu: {ka_no}")
+                print(f"✅ Yeni fatura bulundu: {ka_no}")
             else:
-                print(f"⏭️ {brand} faturası zaten işlenmiş: {ka_no}")
+                print(f"⏭️ Fatura zaten işlenmiş: {ka_no}")
         
-        print(f"🔍 İşlenmemiş fatura sayısı: {len(unprocessed_invoices)}/{len(brand_data)}")
+        print(f"🔍 İşlenmemiş fatura sayısı: {len(unprocessed_invoices)}/{len(filtered_invoices)}")
         
         return unprocessed_invoices
         
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Otokoc API fatura verileri çekme hatası: {str(e)}")
+        traceback.print_exc()
+        return []
     except Exception as e:
-        print(f"❌ Fatura verileri işlenirken hata: {str(e)}")
+        print(f"❌ Otokoc API fatura verileri çekme hatası: {str(e)}")
         traceback.print_exc()
         return []
 
@@ -324,9 +430,6 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
         is_earchive = not alias  # alias yoksa E-Arşiv
         print(f"✅ Fatura tipi: {'E-Arşiv' if is_earchive else 'E-Fatura'}")
         
-        # Marka bilgisini al
-        brand = kayit.get('Brand', 'Bilinmiyor') if kayit else 'Bilinmiyor'
-        
         # Kayıt verileri varsa, bunları kullan
         if kayit:
             # Kayıt verilerini formatla
@@ -344,10 +447,7 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                 'Ilce': ilce or kayit.get('Ilce', ''),
                 'VergiDairesi': vergi_dairesi or kayit.get('VergiDairesi', ''),
                 'KiraTipi': kayit.get('KiraTipi', ''),
-                'PlakaNo': kayit.get('PlakaNo', ''),
-                'Aciklama': kayit.get('Aciklama', ''),
-                'CHECKOUT_DATE': kayit.get('CHECKOUT_DATE', ''),
-                'CHECKIN_DATE': kayit.get('CHECKIN_DATE', '')
+                'PlakaNo': kayit.get('PlakaNo', '')
             }
             
             # Boş değerleri kontrol et ve varsayılan değerlerle doldur
@@ -690,25 +790,17 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                     note3 = ET.SubElement(parent, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
                     aciklama = formatted_invoice_data.get('Aciklama', '')
                     kullanici_adi = ''
-                    if aciklama:
-                        # Kullanıcı adını bul
-                        if 'Kullanıcı Adı:' in aciklama:
-                            kullanici_adi = aciklama.split('Kullanıcı Adı:')[1].split('Rez')[0].strip()
-                        elif 'Kullanıcı:' in aciklama:
-                            kullanici_adi = aciklama.split('Kullanıcı:')[1].split('Rez')[0].strip()
-                    note3.text = f"KULLANICI: {kullanici_adi if kullanici_adi else 'Belirtilmemiş'}"
+                    if 'Kullanıcı Adı:' in aciklama:
+                        kullanici_adi = aciklama.split('Kullanıcı Adı:')[1].split('Rez')[0].strip()
+                    note3.text = f"KULLANICI: {kullanici_adi}"
                     print(f"✅ Note 3 eklendi: {note3.text}")
                     
                     # 4. Note: Rezervasyon numarası
                     note4 = ET.SubElement(parent, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
                     rez_no = ''
-                    if aciklama:
-                        # Rezervasyon numarasını bul
-                        if 'CNF:' in aciklama:
-                            rez_no = aciklama.split('CNF:')[1].strip()
-                        elif 'Rez:' in aciklama:
-                            rez_no = aciklama.split('Rez:')[1].strip()
-                    note4.text = f"REZ: {rez_no if rez_no else 'Belirtilmemiş'}"
+                    if 'CNF:' in aciklama:
+                        rez_no = aciklama.split('CNF:')[1].strip()
+                    note4.text = f"REZ: {rez_no}"
                     print(f"✅ Note 4 eklendi: {note4.text}")
                     
                     # 5. Note: Kullanım tarihleri
@@ -716,23 +808,11 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                     checkout = formatted_invoice_data.get('CHECKOUT_DATE', '')
                     checkin = formatted_invoice_data.get('CHECKIN_DATE', '')
                     try:
-                        if checkout and checkin:
-                            checkout_date = datetime.fromisoformat(checkout.replace('Z', '+00:00')).strftime('%d/%m/%Y')
-                            checkin_date = datetime.fromisoformat(checkin.replace('Z', '+00:00')).strftime('%d/%m/%Y')
-                            note5.text = f"KULLANIM TARİHİ: {checkout_date}-{checkin_date}"
-                        else:
-                            # Açıklamadan tarihleri bulmaya çalış
-                            if 'Tarih:' in aciklama:
-                                tarih_kismi = aciklama.split('Tarih:')[1].split()[0]
-                                if '-' in tarih_kismi:
-                                    note5.text = f"KULLANIM TARİHİ: {tarih_kismi}"
-                                else:
-                                    note5.text = "KULLANIM TARİHİ: Belirtilmemiş"
-                            else:
-                                note5.text = "KULLANIM TARİHİ: Belirtilmemiş"
-                    except (ValueError, AttributeError) as e:
-                        print(f"⚠️ Tarih dönüştürme hatası: {e}")
-                        note5.text = "KULLANIM TARİHİ: Belirtilmemiş"
+                        checkout_date = datetime.fromisoformat(checkout.replace('Z', '+00:00')).strftime('%d/%m/%Y')
+                        checkin_date = datetime.fromisoformat(checkin.replace('Z', '+00:00')).strftime('%d/%m/%Y')
+                        note5.text = f"KULLANIM TARİHİ : {checkout_date}-{checkin_date}"
+                    except (ValueError, AttributeError):
+                        note5.text = "KULLANIM TARİHİ : Belirtilmemiş"
                     print(f"✅ Note 5 eklendi: {note5.text}")
             else:
                 print("⚠️ Note elementleri bulunamadı")
@@ -881,10 +961,9 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                     fatura_uuid = invoice_header.UUID if hasattr(invoice_header, 'UUID') else "Bilinmiyor"
                     
                     notification_message = f"""
-<b>✅ {brand} Faturası Başarıyla Yüklendi</b>
+<b>✅ Fatura Başarıyla Yüklendi</b>
 
 <b>Fatura Bilgileri:</b>
-🔹 <b>Marka:</b> {brand}
 🔹 <b>Fatura Tipi:</b> {fatura_tipi}
 🔹 <b>Fatura ID:</b> {fatura_id}
 🔹 <b>Fatura UUID:</b> {fatura_uuid}
@@ -1124,17 +1203,17 @@ def save_processed_invoice(invoice_no):
         print(f"❌ İşlenmiş fatura kaydedilirken hata: {str(e)}")
         return False
 
-def process_new_invoices(invoice_data):
+def process_new_invoices():
     try:
+        # Fatura verilerini Otokoc API'den çek
+        invoice_data = get_invoice_data()
+        
         if not invoice_data:
             print("⚠️ İşlenecek fatura verisi bulunamadı")
             return
         
-        # Markalara göre fatura sayılarını hesapla
-        brand = invoice_data[0].get('Brand', 'Bilinmiyor') if invoice_data else 'Bilinmiyor'
-        
         # Yeni faturalar varsa EDM'ye bağlan
-        print(f"\n📋 {brand} için {len(invoice_data)} yeni kayıt işlenecek")
+        print(f"\n📋 Toplam {len(invoice_data)} yeni kayıt işlenecek")
         
         # EDM'ye bağlan
         client, session_id = edm_login()
@@ -1155,9 +1234,9 @@ EDM sistemine bağlanılamadı.
         
         # İşlem başlangıç bildirimi
         start_notification = f"""
-<b>🚀 {brand} Fatura İşlemleri Başlatıldı</b>
+<b>🚀 Yeni Fatura İşlemleri Başlatıldı</b>
 
-<b>İşlenecek Kayıt Sayısı:</b> {len(invoice_data)}
+<b>Toplam İşlenecek Kayıt:</b> {len(invoice_data)}
 <b>Başlangıç Tarihi:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}
 """
         send_telegram_notification(start_notification)
@@ -1173,7 +1252,7 @@ EDM sistemine bağlanılamadı.
             
             print(f"\n{'='*50}")
             print(f"🔄 Kayıt {index}/{len(invoice_data)} işleniyor")
-            print(f"📝 Marka: {brand}, VKN: {vkn}, KA No: {ka_no}")
+            print(f"📝 VKN: {vkn}, KA No: {ka_no}")
             print(f"{'='*50}")
 
             if not vkn:
@@ -1215,12 +1294,12 @@ EDM sistemine bağlanılamadı.
 
             # XML güncelle ve faturayı yükle - kayıt verisini de gönder
             if update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, tam_adres, il, ilce, kayit):
-                print(f"\n✅ Marka: {brand}, VKN: {vkn}, KA No: {ka_no} - İşlem başarıyla tamamlandı")
+                print(f"\n✅ VKN: {vkn}, KA No: {ka_no} - İşlem başarıyla tamamlandı")
                 success_count += 1
                 # İşlenmiş faturalar listesine ekle
                 save_processed_invoice(ka_no)
             else:
-                print(f"\n❌ Marka: {brand}, VKN: {vkn}, KA No: {ka_no} - İşlem başarısız")
+                print(f"\n❌ VKN: {vkn}, KA No: {ka_no} - İşlem başarısız")
                 fail_count += 1
 
             # İşlemler arası kısa bekle
@@ -1230,12 +1309,12 @@ EDM sistemine bağlanılamadı.
         
         # İşlem sonuç bildirimi
         end_notification = f"""
-<b>🏁 {brand} Fatura İşlemleri Tamamlandı</b>
+<b>🏁 Yeni Fatura İşlemleri Tamamlandı</b>
 
 <b>Sonuç Özeti:</b>
 🔹 <b>Toplam İşlenen Kayıt:</b> {len(invoice_data)}
-✅ <b>Başarılı:</b> {success_count}
-❌ <b>Başarısız:</b> {fail_count}
+🔹 <b>Başarılı İşlem:</b> {success_count}
+🔹 <b>Başarısız İşlem:</b> {fail_count}
 
 <b>Bitiş Tarihi:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}
 """
@@ -1256,93 +1335,22 @@ EDM sistemine bağlanılamadı.
 """
         send_telegram_notification(error_notification)
 
-def get_local_time():
-    """Sunucu saatinden yerel saati hesaplar (UTC+3)"""
-    server_time = datetime.now()
-    time_difference = timedelta(hours=3)  # Sunucu saati ile yerel saat arasındaki fark
-    return server_time + time_difference
-
 def main():
     try:
         print("\n🔄 Fatura işleme servisi başlatıldı")
         send_telegram_notification("<b>🚀 Fatura İşleme Servisi Başlatıldı</b>")
         
-        # Hangi markanın kontrol edileceğini belirlemek için sayaç
-        check_counter = 0
-        last_reset_date = None  # Son sıfırlama tarihini tutmak için değişken
+        # İlk çalıştırmada tüm faturaları işle
+        process_new_invoices()
         
+        # Her 1 dakikada bir yeni faturaları kontrol et
         while True:
-            server_time = datetime.now()
-            local_time = get_local_time()
-            
-            # Her gün yerel saat 00:00'da processed_invoices.json dosyasını sıfırla
-            current_date = local_time.date()
-            if last_reset_date != current_date and local_time.hour == 0 and local_time.minute == 0:
-                try:
-                    # Dosyayı sıfırla
-                    with open(PROCESSED_INVOICES_FILE, 'w', encoding='utf-8') as f:
-                        json.dump({"processed_invoices": [], "last_check_time": local_time.strftime('%Y-%m-%d %H:%M:%S')}, f, indent=2, ensure_ascii=False)
-                    print(f"\n🔄 {local_time.strftime('%Y-%m-%d %H:%M:%S')} - İşlenmiş faturalar listesi sıfırlandı")
-                    send_telegram_notification(f"<b>🔄 İşlenmiş Faturalar Listesi Sıfırlandı</b>\n\n<b>Tarih:</b> {local_time.strftime('%d.%m.%Y %H:%M:%S')}")
-                    last_reset_date = current_date
-                except Exception as e:
-                    print(f"\n❌ İşlenmiş faturalar listesi sıfırlanırken hata: {str(e)}")
-                    send_telegram_notification(f"<b>❌ İşlenmiş Faturalar Listesi Sıfırlama Hatası</b>\n\n<b>Hata:</b> {str(e)}")
-            
-            brand_to_check = "Avis" if check_counter % 2 == 0 else "Budget"
-            license_no = 1 if brand_to_check == "Avis" else 2
-            
-            print(f"\n🔍 {local_time.strftime('%H:%M:%S')} - {brand_to_check} faturaları kontrol ediliyor...")
-            print(f"📅 Sunucu Saati: {server_time.strftime('%H:%M:%S')}")
-            print(f"📅 Yerel Saat: {local_time.strftime('%H:%M:%S')}")
-            
-            # Tek bir marka için fatura verilerini çek ve işle
-            invoice_data = []
-            
-            # Token kontrolü ve yenileme
-            token = check_and_refresh_token()
-            if token:
-                url = "https://merkezwebapi.otokoc.com.tr/STDealer/GetInvoiceList"
-                
-                # Sadece bugünün tarihini kullan
-                today_local = local_time
-                yesterday_local = today_local - timedelta(days=1)
-
-                payload = {
-                    "Token": token,
-                    "LicenseNo": license_no,
-                    "InvoiceDate": "",
-                    "StartDate": yesterday_local.strftime("%Y%m%d"),
-                    "EndDate": today_local.strftime("%Y%m%d")
-                }
-                
-                try:
-                    response = requests.post(url, json=payload)
-                    response.raise_for_status()
-                    response_data = response.json()
-                    
-                    if 'Data' in response_data and 'Invoices' in response_data['Data']:
-                        invoices = response_data['Data']['Invoices']
-                        # Marka bilgisini ekle
-                        for invoice in invoices:
-                            invoice['Brand'] = brand_to_check
-                        invoice_data.extend(invoices)
-                except Exception as e:
-                    print(f"❌ {brand_to_check} faturaları çekilirken hata: {str(e)}")
-            
-            if invoice_data:
-                print(f"✅ {brand_to_check} için {len(invoice_data)} fatura verisi çekildi")
-                # İşlenecek faturaları hazırla ve process_new_invoices'a gönder
-                unprocessed_invoices = get_invoice_data(invoice_data)
-                if unprocessed_invoices:
-                    process_new_invoices(unprocessed_invoices)
-            else:
-                print(f"ℹ️ {brand_to_check} için yeni fatura bulunamadı")
-            
-            # Bir sonraki kontrole kadar bekle
-            print(f"\n⏳ {brand_to_check} kontrolü tamamlandı. Bir sonraki kontrol için bekleniyor...")
+            print(f"\n⏳ Bir sonraki kontrol için bekleniyor... ({datetime.now().strftime('%H:%M:%S')})")
             time.sleep(60)  # 60 saniye bekle
-            check_counter += 1
+            print(f"\n🔍 Yeni faturalar kontrol ediliyor... ({datetime.now().strftime('%H:%M:%S')})")
+            
+            # Yeni faturaları işle
+            process_new_invoices()
             
     except KeyboardInterrupt:
         print("\n⚠️ Kullanıcı tarafından durduruldu")
@@ -1357,7 +1365,7 @@ def main():
 <b>Hata Mesajı:</b>
 {str(e)}
 
-<b>İşlem Tarihi:</b> {local_time.strftime('%d.%m.%Y %H:%M:%S')}
+<b>İşlem Tarihi:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}
 """
         send_telegram_notification(error_notification)
 
