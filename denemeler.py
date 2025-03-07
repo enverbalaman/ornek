@@ -468,16 +468,16 @@ def check_user_and_get_info(client, session_id, vkn):
 
                 # TURMOB sorgusu için header hazırla
                 turmob_header = {
-                    "SESSION_ID": turmob_session_id,  # Yeni session ID kullan
-                    "CLIENT_TXN_ID": str(uuid.uuid4()),
-                    "ACTION_DATE": datetime.now().strftime("%Y-%m-%d"),
-                    "REASON": "E-fatura/E-Arşiv gönder-al testleri için",
-                    "APPLICATION_NAME": "EDM MINI CONNECTOR v1.0",
-                    "HOSTNAME": "MDORA17",
-                    "CHANNEL_NAME": "TEST",
-                    "COMPRESSED": "N"
+                "SESSION_ID": session_id,
+                "CLIENT_TXN_ID": str(uuid.uuid4()),
+                "ACTION_DATE": datetime.now().strftime("%Y-%m-%d"),
+                "REASON": "E-fatura/E-Arşiv gönder-al-CANLI",
+                "APPLICATION_NAME": "EDM MINI CONNECTOR v1.0",
+                "HOSTNAME": "EDM MINI CONNECTOR v1.0",
+                "CHANNEL_NAME": "PROD",
+                "COMPRESSED": "N"
                 }
-                
+
                 print("\n📤 TURMOB İsteği Gönderiliyor...")
                 print(f"VKN: {vkn}")
                 print(f"Session ID: {turmob_session_id}")
