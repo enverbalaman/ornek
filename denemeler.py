@@ -1692,6 +1692,20 @@ def check_and_reset_at_midnight():
         print("\n🕛 Gece yarısı tespit edildi, işlenmiş faturalar listesi sıfırlanıyor...")
         reset_processed_invoices()
 
+def get_wait_time():
+    """Yerel saate göre bekleme süresini belirler
+    07:00-19:00 arası 15 saniye
+    Diğer saatlerde 60 saniye
+    """
+    local_now = get_local_time()
+    hour = local_now.hour
+    
+    # Mesai saatleri: 07:00 - 19:00
+    if 7 <= hour < 19:
+        return 15  # 15 saniye
+    else:
+        return 60  # 60 saniye
+
 def main():
     try:
         local_now = get_local_time()
@@ -1703,18 +1717,21 @@ def main():
         
         # İlk çalıştırmada hem Avis hem Budget faturalarını işle
         process_new_invoices(1)  # Avis
-        time.sleep(15)  # 15 saniye bekle
+        wait_time = get_wait_time()
+        print(f"⏳ {wait_time} saniye bekleniyor... (Mesai saati: {'Evet' if 7 <= local_now.hour < 19 else 'Hayır'})")
+        time.sleep(wait_time)
         process_new_invoices(2)  # Budget
         
-        # Her 15 saniyede bir sırayla Avis ve Budget kontrolü yap
         while True:
             # Gece yarısı kontrolü ve eski logları temizle
             check_and_reset_at_midnight()
             cleanup_old_logs()
             
             local_now = get_local_time()
-            print(f"\n⏳ Bir sonraki Avis kontrolü için bekleniyor... (Yerel Saat: {local_now.strftime('%H:%M:%S')})")
-            time.sleep(15)  # 15 saniye bekle
+            wait_time = get_wait_time()
+            print(f"\n⏳ Bir sonraki Avis kontrolü için {wait_time} saniye bekleniyor... (Yerel Saat: {local_now.strftime('%H:%M:%S')})")
+            print(f"📊 Mesai saati: {'Evet' if 7 <= local_now.hour < 19 else 'Hayır'}")
+            time.sleep(wait_time)
             
             # Gece yarısı kontrolü
             check_and_reset_at_midnight()
@@ -1727,8 +1744,10 @@ def main():
             check_and_reset_at_midnight()
             
             local_now = get_local_time()
-            print(f"\n⏳ Bir sonraki Budget kontrolü için bekleniyor... (Yerel Saat: {local_now.strftime('%H:%M:%S')})")
-            time.sleep(15)  # 15 saniye bekle
+            wait_time = get_wait_time()
+            print(f"\n⏳ Bir sonraki Budget kontrolü için {wait_time} saniye bekleniyor... (Yerel Saat: {local_now.strftime('%H:%M:%S')})")
+            print(f"📊 Mesai saati: {'Evet' if 7 <= local_now.hour < 19 else 'Hayır'}")
+            time.sleep(wait_time)
             
             # Gece yarısı kontrolü
             check_and_reset_at_midnight()
