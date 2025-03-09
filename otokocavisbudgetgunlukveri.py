@@ -67,8 +67,8 @@ def get_invoice_data(token, license_no):
             "Token": token,
             "LicenseNo": license_no,  # 1 for Avis, 2 for Budget
             "InvoiceDate": "",
-            "StartDate": yesterday,
-            "EndDate": yesterday
+            "StartDate": today,
+            "EndDate": today
         }
         
         response = requests.post(url, json=payload)
