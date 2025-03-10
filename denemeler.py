@@ -824,18 +824,18 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                         party_name.text = formatted_invoice_data['TumMusteriAdi']
                         print(f"✅ Müşteri adı JSON'dan alındı: {formatted_invoice_data['TumMusteriAdi']}")
                 
-                # Vergi Dairesi güncelleme - TURMOB'dan gelen bilgiyi öncelikli kullan
+                # Vergi Dairesi güncelleme - TURMOB'dan gelen vergi dairesi bilgisini kullan
                 tax_scheme_name = party.find('.//cac:PartyTaxScheme/cac:TaxScheme/cbc:Name', namespaces)
                 if tax_scheme_name is not None:
-                    # TURMOB'dan gelen vergi dairesi bilgisini öncelikli kullan
-                    tax_scheme_name.text = vergi_dairesi if vergi_dairesi else formatted_invoice_data['VergiDairesi']
-                    print(f"✅ Vergi dairesi güncellendi (TURMOB): {tax_scheme_name.text}")
+                    # Her zaman TURMOB'dan gelen vergi dairesi bilgisini kullan
+                    tax_scheme_name.text = vergi_dairesi
+                    print(f"✅ Vergi dairesi TURMOB'dan alındı: {vergi_dairesi}")
                     
-                # Vergi Dairesi bilgisini logla
-                print(f"\n📋 Vergi Dairesi Bilgisi:")
-                print(f"TURMOB'dan gelen: {vergi_dairesi}")
-                print(f"JSON'dan gelen: {formatted_invoice_data['VergiDairesi']}")
-                print(f"Kullanılan: {tax_scheme_name.text}")
+                    # Debug için vergi dairesi bilgilerini logla
+                    print("\n📋 Vergi Dairesi Bilgisi:")
+                    print(f"TURMOB'dan gelen: {vergi_dairesi}")
+                    print(f"JSON'dan gelen: {formatted_invoice_data['VergiDairesi']} (Kullanılmadı)")
+                    print(f"XML'e yazılan: {tax_scheme_name.text}")
 
                 # Adres bilgilerini güncelle
                 postal_address = party.find('.//cac:PostalAddress', namespaces)
