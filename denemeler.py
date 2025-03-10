@@ -346,8 +346,7 @@ def edm_login():
 
 def check_user_and_get_info(client, session_id, vkn):
     print("\n" + "="*50)
-    print(f"🔍 CheckUser İşlemi Başlatıldı - VKN: {vkn}")
-    print("="*50)
+    print(f"🔍 VKN: {vkn} için CheckUser kontrolü yapılıyor...")
     
     action_date = get_local_time().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+03:00"
 
@@ -404,6 +403,9 @@ def check_user_and_get_info(client, session_id, vkn):
         print(json.dumps(serialized_response, indent=2, ensure_ascii=False))
         print("-" * 50)
 
+        # E-Fatura kontrolü için alias değişkeni
+        alias = None
+        
         # Response boş dizi kontrolü
         if not response or len(response) == 0:
             error_details = {
@@ -414,31 +416,29 @@ def check_user_and_get_info(client, session_id, vkn):
             save_error_log("CHECK_USER_NOT_FOUND", f"VKN {vkn} e-fatura sisteminde bulunamadı", error_details)
             print("\n⚠️ Kullanıcı e-fatura sisteminde bulunamadı")
             print("⚠️ E-Arşiv faturası olarak işleme devam edilecek")
-            return None, None, None, None, None, None
-        
-        print("\n✅ Kullanıcı e-fatura sisteminde bulundu")
-        
-        # Response'un ilk elemanından ALIAS değerini al
-        first_user = response[0]
-        alias = first_user.ALIAS if hasattr(first_user, 'ALIAS') else None
-        print(f"📧 Alias: {alias}")
-        
-        if not alias:
-            error_details = {
-                "vkn": vkn,
-                "request_header": request_header,
-                "response": serialized_response,
-                "first_user": serialize_object(first_user)
-            }
-            save_error_log("CHECK_USER_NO_ALIAS", f"VKN {vkn} için alias bulunamadı", error_details)
-            print("\n⚠️ Alias bulunamadı")
-            print("⚠️ E-Arşiv faturası olarak işleme devam edilecek")
-            return None, None, None, None, None, None
+        else:
+            print("\n✅ Kullanıcı e-fatura sisteminde bulundu")
             
-         # TURMOB bilgilerini al - Yeniden deneme mekanizması ile
+            # Response'un ilk elemanından ALIAS değerini al
+            first_user = response[0]
+            alias = first_user.ALIAS if hasattr(first_user, 'ALIAS') else None
+            print(f"📧 Alias: {alias}")
+            
+            if not alias:
+                error_details = {
+                    "vkn": vkn,
+                    "request_header": request_header,
+                    "response": serialized_response,
+                    "first_user": serialize_object(first_user)
+                }
+                save_error_log("CHECK_USER_NO_ALIAS", f"VKN {vkn} için alias bulunamadı", error_details)
+                print("\n⚠️ Alias bulunamadı")
+                print("⚠️ E-Arşiv faturası olarak işleme devam edilecek")
+            
+        # TURMOB bilgilerini al - Her durumda TURMOB'a istek yap
         max_turmob_attempts = 2  # Maksimum 2 deneme
         turmob_retry_delay = 3  # 3 saniye bekleme süresi
-        turmob_success = False  # TURMOB sorgusu başarı durumu
+        turmob_success = False
         
         for attempt in range(max_turmob_attempts):
             print(f"\n🔄 TURMOB Bilgileri Alınıyor... (Deneme {attempt + 1}/{max_turmob_attempts})")
@@ -502,8 +502,7 @@ def check_user_and_get_info(client, session_id, vkn):
                         continue
                     else:
                         print("❌ Maksimum deneme sayısına ulaşıldı. TURMOB verisi alınamadı.")
-                        print("⚠️ Bu kayıt atlanıyor ve sonraki kayda geçiliyor.")
-                        return False  # İşlemi sonlandır ve sonraki kayda geç
+                        return alias, None, None, None, None, None
                 
                 # TURMOB yanıtını serialize et
                 turmob_data = serialize_object(turmob_response)
@@ -547,7 +546,7 @@ def check_user_and_get_info(client, session_id, vkn):
                     il = ''
                     ilce = ''
                 
-                print("\n✅ TURMOB bilgileri başarıyla alındı")
+                print("\n📋 TURMOB Bilgileri:")
                 print(f"Vergi Dairesi: {vergi_dairesi}")
                 print(f"Unvan: {unvan}")
                 print(f"Adres: {tam_adres}")
@@ -567,40 +566,8 @@ def check_user_and_get_info(client, session_id, vkn):
                     "attempt": attempt + 1,
                     "traceback": traceback.format_exc()
                 }
-                
-                # SOAP yanıtından hata detayını al
-                try:
-                    if hasattr(e, 'detail') and e.detail is not None:
-                        # XML elementini string'e çevir
-                        soap_detail = tostring(e.detail, encoding='unicode')
-                        error_details["soap_detail"] = soap_detail
-                        print(f"\n🔍 SOAP Hata Detayı:")
-                        print(soap_detail)
-                        
-                        # Detaylı hata mesajını bul
-                        for elem in e.detail.iter():
-                            if 'faultstring' in elem.tag.lower():
-                                error_details["fault_string"] = elem.text
-                                print(f"Hata Mesajı: {elem.text}")
-                            elif 'faultcode' in elem.tag.lower():
-                                error_details["fault_code"] = elem.text
-                                print(f"Hata Kodu: {elem.text}")
-                except Exception as detail_error:
-                    error_details["detail_error"] = str(detail_error)
-                    print(f"⚠️ SOAP detayı işlenirken hata: {str(detail_error)}")
-                
                 save_error_log("TURMOB_SOAP_ERROR", f"SOAP Fault: {str(e)}", error_details)
                 print(f"❌ TURMOB SOAP hatası: {str(e)}")
-                
-                if "Hata Oluştu. Lütfen Hata Detayına bakınız" in str(e):
-                    if attempt < max_turmob_attempts - 1:
-                        print(f"⏳ {turmob_retry_delay} saniye bekleyip tekrar deneniyor...")
-                        time.sleep(turmob_retry_delay)
-                        continue
-                    else:
-                        print("❌ Maksimum deneme sayısına ulaşıldı. TURMOB sorgusu başarısız.")
-                        print("⚠️ Bu kayıt atlanıyor ve sonraki kayda geçiliyor.")
-                        return False  # İşlemi sonlandır ve sonraki kayda geç
                 
                 if attempt < max_turmob_attempts - 1:
                     print(f"⏳ {turmob_retry_delay} saniye bekleyip tekrar deneniyor...")
@@ -608,8 +575,7 @@ def check_user_and_get_info(client, session_id, vkn):
                     continue
                 else:
                     print("❌ Maksimum deneme sayısına ulaşıldı. TURMOB sorgusu başarısız.")
-                    print("⚠️ Bu kayıt atlanıyor ve sonraki kayda geçiliyor.")
-                    return False  # İşlemi sonlandır ve sonraki kayda geç
+                    return alias, None, None, None, None, None
                 
             except zeep.exceptions.TransportError as e:
                 error_details = {
@@ -629,8 +595,7 @@ def check_user_and_get_info(client, session_id, vkn):
                     continue
                 else:
                     print("❌ Maksimum deneme sayısına ulaşıldı. TURMOB sorgusu başarısız.")
-                    print("⚠️ Bu kayıt atlanıyor ve sonraki kayda geçiliyor.")
-                    return False  # İşlemi sonlandır ve sonraki kayda geç
+                    return alias, None, None, None, None, None
                 
             except Exception as e:
                 error_details = {
@@ -649,14 +614,12 @@ def check_user_and_get_info(client, session_id, vkn):
                     continue
                 else:
                     print("❌ Maksimum deneme sayısına ulaşıldı. TURMOB sorgusu başarısız.")
-                    print("⚠️ Bu kayıt atlanıyor ve sonraki kayda geçiliyor.")
-                    return False  # İşlemi sonlandır ve sonraki kayda geç
-        
+                    return alias, None, None, None, None, None
+
         # Eğer buraya kadar geldiyse ve başarılı olamadıysa
         if not turmob_success:
             print("\n❌ TURMOB bilgileri alınamadı.")
-            print("⚠️ Bu kayıt atlanıyor ve sonraki kayda geçiliyor.")
-            return False  # İşlemi sonlandır ve sonraki kayda geç
+            return alias, None, None, None, None, None
 
     except Exception as e:
         error_details = {
@@ -668,8 +631,7 @@ def check_user_and_get_info(client, session_id, vkn):
         save_error_log("CHECK_USER_UNEXPECTED_ERROR", str(e), error_details)
         print(f"❌ CheckUser hatası: {str(e)}")
         traceback.print_exc()
-        print("⚠️ Bu kayıt atlanıyor ve sonraki kayda geçiliyor.")
-        return False  # İşlemi sonlandır ve sonraki kayda geç
+        return None, None, None, None, None, None
 
 def send_telegram_notification(message):
     try:
@@ -1089,7 +1051,6 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                     print(f"✅ Note 3 eklendi: {note3.text}")
                     
                     # 4. Note: Rezervasyon numarası
-                    note4 = ET.SubElement(parent, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
                     rez_no = ''
                     if aciklama:
                         # Rezervasyon numarasını bul
@@ -1097,8 +1058,13 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                             rez_no = aciklama.split('CNF:')[1].strip()
                         elif 'Rez:' in aciklama:
                             rez_no = aciklama.split('Rez:')[1].strip()
-                    note4.text = f"REZ: {rez_no if rez_no else 'Belirtilmemiş'}"
-                    print(f"✅ Note 4 eklendi: {note4.text}")
+                
+                    if rez_no:
+                        note4 = ET.SubElement(parent, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
+                        note4.text = f"REZ: {rez_no}"
+                        print(f"✅ Note 4 (Rezervasyon) eklendi: {note4.text}")
+                    else:
+                        print("ℹ️ Rezervasyon numarası bulunamadı, not eklenmedi")
                     
                     # 5. Note: Kullanım tarihleri
                     note5 = ET.SubElement(parent, '{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Note')
