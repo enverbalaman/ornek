@@ -833,15 +833,13 @@ def update_xml_and_load(client, session_id, vkn, alias, vergi_dairesi, unvan, ta
                         print(f"TURMOB'dan gelen: {vergi_dairesi}")
                         print(f"✅ Vergi dairesi TURMOB'dan alındı: {vergi_dairesi}")
                     else:
+                        tax_scheme_name.text = "Belirtilmemiş"
                         print("⚠️ TURMOB'dan vergi dairesi bilgisi alınamadı!")
                         print("⚠️ Vergi dairesi 'Belirtilmemiş' olarak ayarlandı")
 
                 # Vergi Dairesi bilgisini logla
                 print(f"\n📋 Vergi Dairesi Bilgisi:")
-                print(f"TURMOB'dan gelen: {vergi_dairesi}")
-                if not vergi_dairesi:
-                    print("⚠️ TURMOB'dan vergi dairesi bilgisi alınamadı!")
-                print(f"JSON'dan gelen: {formatted_invoice_data['VergiDairesi']}")
+                print(f"TURMOB'dan gelen: {vergi_dairesi if vergi_dairesi else 'Belirtilmemiş'}")
                 print(f"Kullanılan: {tax_scheme_name.text}")
 
                 # Adres bilgilerini güncelle
@@ -1570,7 +1568,6 @@ EDM sistemine bağlanılamadı.
                 print(f"\n⚠️ VKN: {vkn} - Firma e-fatura mükellefi değil, E-Arşiv faturası olarak işlenecek")
                 # JSON'dan gelen bilgileri kullan
                 unvan = kayit.get('TumMusteriAdi', '')
-                vergi_dairesi = kayit.get('VergiDairesi', '')
                 tam_adres = kayit.get('Adres', '')
                 il = kayit.get('Il', '')
                 ilce = kayit.get('Ilce', '')
