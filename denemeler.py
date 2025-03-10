@@ -514,37 +514,43 @@ def check_user_and_get_info(client, session_id, vkn):
                 
                 # TURMOB verilerini çıkart
                 vergi_dairesi = turmob_data.get('vergiDairesiAdi', '')
-                unvan = turmob_data.get('unvan', '')
+                unvan = turmob_data.get('unvan') or turmob_data.get('kimlikUnvani', '')
                 
-                # Adres bilgilerini birleştir
-                adres_bilgileri = turmob_data.get('adresBilgileri', {}).get('AdresBilgileri', [])
-                if adres_bilgileri:
-                    adres = adres_bilgileri[0]
-                    adres_parcalari = []
-                    
-                    # Mahalle/Semt
-                    if adres.get('mahalleSemt'):
-                        adres_parcalari.append(adres['mahalleSemt'])
-                    
-                    # Cadde/Sokak
-                    if adres.get('caddeSokak'):
-                        adres_parcalari.append(adres['caddeSokak'])
-                    
-                    # Dış Kapı No
-                    if adres.get('disKapiNo'):
-                        adres_parcalari.append(f"No: {adres['disKapiNo']}")
-                    
-                    # İç Kapı No
-                    if adres.get('icKapiNo'):
-                        adres_parcalari.append(f"Daire: {adres['icKapiNo']}")
-                    
-                    tam_adres = ' '.join(adres_parcalari)
-                    il = adres.get('ilAdi', '')
-                    ilce = adres.get('ilceAdi', '')
-                else:
+                # Adres bilgileri null ise boş değerler kullan
+                if turmob_data.get('adresBilgileri') is None:
                     tam_adres = ''
                     il = ''
                     ilce = ''
+                else:
+                    # Adres bilgileri varsa birleştir
+                    adres_bilgileri = turmob_data.get('adresBilgileri', {}).get('AdresBilgileri', [])
+                    if adres_bilgileri:
+                        adres = adres_bilgileri[0]
+                        adres_parcalari = []
+                        
+                        # Mahalle/Semt
+                        if adres.get('mahalleSemt'):
+                            adres_parcalari.append(adres['mahalleSemt'])
+                        
+                        # Cadde/Sokak
+                        if adres.get('caddeSokak'):
+                            adres_parcalari.append(adres['caddeSokak'])
+                        
+                        # Dış Kapı No
+                        if adres.get('disKapiNo'):
+                            adres_parcalari.append(f"No: {adres['disKapiNo']}")
+                        
+                        # İç Kapı No
+                        if adres.get('icKapiNo'):
+                            adres_parcalari.append(f"Daire: {adres['icKapiNo']}")
+                        
+                        tam_adres = ' '.join(adres_parcalari)
+                        il = adres.get('ilAdi', '')
+                        ilce = adres.get('ilceAdi', '')
+                    else:
+                        tam_adres = ''
+                        il = ''
+                        ilce = ''
                 
                 print("\n📋 TURMOB Bilgileri:")
                 print(f"Vergi Dairesi: {vergi_dairesi}")
