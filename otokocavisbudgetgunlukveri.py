@@ -61,13 +61,13 @@ def get_invoice_data(token, license_no):
         yesterday = (local_now - timedelta(days=1)).strftime("%Y%m%d")
         today = local_now.strftime("%Y%m%d")
         
-        print(f"🗓️ Tarih aralığı: {yesterday} - {today}")
+        print(f"🗓️ Tarih aralığı: {today} - {today}")
         
         payload = {
             "Token": token,
             "LicenseNo": license_no,  # 1 for Avis, 2 for Budget
             "InvoiceDate": "",
-            "StartDate": yesterday,
+            "StartDate": today,
             "EndDate": today
         }
         
